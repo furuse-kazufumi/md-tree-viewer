@@ -1210,6 +1210,16 @@ function postJSON(url, body) {
   return fetch(url, { method: 'POST', headers,
     body: body === undefined ? undefined : JSON.stringify(body) });
 }
+// HTML-escape a string for safe insertion as TEXT inside <pre>. Used for the
+// text/code viewer: a .txt/.json/.py served raw could contain "<script>...",
+// so we escape it to entities — the browser shows the characters and never
+// parses (let alone runs) them. setting textContent would also be safe, but we
+// build the markup as a string here so escaping is explicit and auditable.
+function escapeHTML(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 const treeEl = document.getElementById('tree');
 const contentEl = document.getElementById('content');
 const countEl = document.getElementById('count');
