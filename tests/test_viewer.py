@@ -36,6 +36,11 @@ def sample_tree(tmp_path, monkeypatch):
 
     monkeypatch.setattr(viewer, "ROOT", tmp_path)
     monkeypatch.setattr(viewer, "_GH_REPOS", None)
+    # Reset the v0.2 config-driven globals to defaults so tests are isolated.
+    monkeypatch.setattr(viewer, "VIEW_EXT", viewer.DEFAULT_VIEW_EXT)
+    monkeypatch.setattr(viewer, "ENABLE_OPEN", False)
+    monkeypatch.setattr(viewer, "CONFIG", {})
+    monkeypatch.setattr(viewer, "CONFIG_PATH", tmp_path / ".mdtree.json")
     viewer._tree_cache["json"] = None
     return tmp_path
 
