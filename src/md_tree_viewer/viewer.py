@@ -1550,6 +1550,7 @@ document.getElementById('saveCfg').onclick = async () => {
   const body = {
     view_ext: draftExt,
     project_icons: draftIcons,
+    ignore: draftIgnore,
     enable_open: document.getElementById('enableOpen').checked,
     theme: document.getElementById('themeSel').value,
   };
