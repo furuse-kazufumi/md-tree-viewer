@@ -381,119 +381,230 @@ def _extract_meta(path: Path) -> tuple[str, str]:
     return _MD_INLINE.sub("", title).strip()[:140], desc[:200]
 
 
-def _build_tree(root: Path) -> dict:
-    """Walk the root with pruning and return a tree of only the directories that
-    contain a viewable file (per the active VIEW_EXT)."""
-    nodes: dict[str, dict] = {}  # rel-dir -> node
+# --------------------------------------------------------------------------- #
+# Per-directory scanning (the cacheable unit) and tree assembly (v0.3).
+# --------------------------------------------------------------------------- #
 
-    def node_for(rel: str) -> dict:
-        if rel in nodes:
-            return nodes[rel]
-        name = root.name if rel == "" else Path(rel).name
-        n = {"name": name, "type": "dir", "children": []}
-        nodes[rel] = n
-        return n
+def _file_entry(f: str, rel: str, full: Path) -> dict | None:
+    """Build a file node for one viewable file (or None if its extension is not in
+    the active VIEW_EXT). Title/description for .md is filled later (in parallel)."""
+    ext = Path(f).suffix.lower()
+    if ext not in VIEW_EXT:
+        return None
+    try:
+        mtime = full.stat().st_mtime
+    except OSError:
+        mtime = 0.0
+    renderable = ext in RENDERABLE_EXT
+    if ext == ".pdf":
+        kind = "pdf"
+    elif ext == ".svg":
+        kind = "svg"
+    elif ext in (".md", ".markdown"):
+        kind = "md"
+    else:
+        kind = "other"   # listed via config but not rendered inline
+    entry = {
+        "name": f,
+        "path": (f if rel == "" else f"{rel}/{f}"),
+        "type": "file",
+        "ext": kind,
+        "renderable": renderable,
+        "mtime": mtime,
+    }
+    if ext == ".pdf":
+        entry["title"], entry["desc"] = f, "(PDF)"
+    elif ext == ".svg":
+        entry["title"], entry["desc"] = f, "(SVG image)"
+    elif kind != "md":
+        entry["title"], entry["desc"] = f, f"({ext.lstrip('.').upper() or 'file'})"
+    return entry
 
-    root_node = node_for("")
-    file_dirs: dict[str, list] = {}
-    md_jobs: list[tuple[dict, Path]] = []  # (entry, full) — meta extracted in parallel later
-    for dp, dns, fns in os.walk(root):
-        dns[:] = [d for d in dns if not _skip_dir(d)]
-        rel = "" if Path(dp) == root else str(Path(dp).relative_to(root)).replace("\\", "/")
-        for f in sorted(fns, key=str.lower):
-            ext = Path(f).suffix.lower()
-            if ext not in VIEW_EXT:
-                continue
-            full = Path(dp) / f
-            try:
-                mtime = full.stat().st_mtime
-            except OSError:
-                mtime = 0.0
-            renderable = ext in RENDERABLE_EXT
-            if ext == ".pdf":
-                kind = "pdf"
-            elif ext == ".svg":
-                kind = "svg"
-            elif ext in (".md", ".markdown"):
-                kind = "md"
-            else:
-                kind = "other"   # listed via config but not rendered inline
-            entry = {
-                "name": f,
-                "path": (f if rel == "" else f"{rel}/{f}"),
-                "type": "file",
-                "ext": kind,
-                "renderable": renderable,
-                "mtime": mtime,
-            }
-            if ext == ".pdf":
-                entry["title"], entry["desc"] = f, "(PDF)"
-            elif ext == ".svg":
-                entry["title"], entry["desc"] = f, "(SVG image)"
-            elif kind == "md":
-                md_jobs.append((entry, full))
-            else:
-                entry["title"], entry["desc"] = f, f"({ext.lstrip('.').upper() or 'file'})"
-            file_dirs.setdefault(rel, []).append(entry)
 
-    # Extract title/desc for .md files in parallel (fast for 1000+ files).
-    from concurrent.futures import ThreadPoolExecutor
+def _scan_one_dir(root: Path, rel: str) -> tuple[list[dict], list[str], float]:
+    """Scan a single directory's immediate contents (NOT recursive). Returns
+    ``(file_entries, child_dir_names, dir_mtime)``:
 
-    def _fill(job: tuple[dict, Path]) -> None:
-        entry, full = job
-        entry["title"], entry["desc"] = _extract_meta(full)
+    - ``file_entries`` — viewable file nodes directly in this dir (.md metadata
+      filled), sorted by name.
+    - ``child_dir_names`` — names of non-pruned sub-directories, sorted.
+    - ``dir_mtime`` — the directory's own mtime, used as the cache invalidation
+      key (changes when files are added/removed/renamed in it).
 
+    This is the unit the persistent cache stores and re-scans incrementally."""
+    dpath = root if rel == "" else root / rel
+    try:
+        dir_mtime = dpath.stat().st_mtime
+    except OSError:
+        dir_mtime = 0.0
+    files: list[dict] = []
+    child_dirs: list[str] = []
+    md_jobs: list[tuple[dict, Path]] = []
+    try:
+        with os.scandir(dpath) as it:
+            entries = list(it)
+    except OSError:
+        return [], [], dir_mtime
+    for de in entries:
+        name = de.name
+        try:
+            is_dir = de.is_dir()
+        except OSError:
+            is_dir = False
+        if is_dir:
+            if not _skip_dir(name):
+                child_dirs.append(name)
+            continue
+        entry = _file_entry(name, rel, Path(de.path))
+        if entry is None:
+            continue
+        files.append(entry)
+        if entry["ext"] == "md":
+            md_jobs.append((entry, Path(de.path)))
     if md_jobs:
+        from concurrent.futures import ThreadPoolExecutor
+
+        def _fill(job: tuple[dict, Path]) -> None:
+            e, full = job
+            e["title"], e["desc"] = _extract_meta(full)
+
         with ThreadPoolExecutor(max_workers=16) as ex:
             list(ex.map(_fill, md_jobs))
+    files.sort(key=lambda c: c["name"].lower())
+    child_dirs.sort(key=str.lower)
+    return files, child_dirs, dir_mtime
 
-    # Connect only the directories that hold files, walking up to the root.
-    def ensure_chain(rel: str) -> dict:
-        if rel == "":
-            return root_node
-        if rel in nodes and nodes[rel].get("_linked"):
-            return nodes[rel]
-        node = node_for(rel)
-        parent_rel = "" if "/" not in rel else rel.rsplit("/", 1)[0]
-        parent = ensure_chain(parent_rel)
-        if not node.get("_linked"):
-            parent["children"].append(node)
-            node["_linked"] = True
+
+def _build_tree(root: Path, max_depth: int | None = None,
+                base_rel: str = "", use_cache: bool | None = None) -> dict:
+    """Walk the root with pruning and return a tree of only the directories that
+    contain a viewable file (per the active VIEW_EXT).
+
+    v0.3:
+    - ``max_depth`` limits how deep the walk descends from ``base_rel`` (None =
+      unlimited, the original full-tree behaviour). When the limit truncates a
+      directory that has further content, the node is marked ``lazy: true`` with
+      empty ``children`` so the client can fetch it on demand via
+      ``GET /api/tree?path=<dir>``.
+    - A persistent per-directory cache (keyed by each dir's mtime) lets startup
+      re-scan only the directories that changed. Pass ``use_cache=False`` (or run
+      with ``--no-cache``) to bypass it; the default follows the module
+      ``USE_CACHE`` flag.
+
+    ``base_rel`` lets callers build only a subtree (used by the lazy endpoint).
+    The returned node always carries the aggregated ``mtime``; the ROOT-level node
+    additionally carries ``gh_repos`` and ``project_icons``."""
+    if use_cache is None:
+        use_cache = USE_CACHE
+    cache = _load_cache(root) if use_cache else {}
+    new_cache: dict[str, dict] = {}
+
+    def scan(rel: str) -> tuple[list[dict], list[str]]:
+        """Return (file_entries, child_dir_names) for `rel`, reusing the cache when
+        the directory's mtime is unchanged."""
+        dpath = root if rel == "" else root / rel
+        try:
+            mtime = dpath.stat().st_mtime
+        except OSError:
+            mtime = 0.0
+        cached = cache.get(rel)
+        if cached is not None and cached.get("mtime") == mtime:
+            files = [dict(e) for e in cached.get("files", [])]
+            child_dirs = list(cached.get("dirs", []))
+        else:
+            files, child_dirs, mtime = _scan_one_dir(root, rel)
+        new_cache[rel] = {"mtime": mtime, "files": files, "dirs": child_dirs}
+        return files, child_dirs
+
+    def build(rel: str, depth: int) -> dict | None:
+        """Build the node for `rel`, recursing into children unless the depth
+        limit is hit. Returns None for a directory with no viewable content at or
+        below it (so empty branches are pruned), except the base node is always
+        returned."""
+        files, child_dirs = scan(rel)
+        children: list[dict] = []
+        has_deeper = False
+        truncate = max_depth is not None and depth >= max_depth
+        for d in child_dirs:
+            child_rel = d if rel == "" else f"{rel}/{d}"
+            if truncate:
+                # Don't descend; emit a lazy stub only if it actually has content.
+                if _dir_has_content(root, child_rel, cache, new_cache):
+                    cm = new_cache.get(child_rel, {}).get("mtime", 0.0)
+                    children.append({
+                        "name": d, "type": "dir", "children": [],
+                        "lazy": True, "mtime": cm,
+                    })
+                    has_deeper = True
+                continue
+            child_node = build(child_rel, depth + 1)
+            if child_node is not None:
+                children.append(child_node)
+        children.extend(files)
+        if not children and rel != base_rel:
+            return None
+        children.sort(key=lambda c: (c["type"] == "file", c["name"].lower()))
+        mt = 0.0
+        for c in children:
+            cm = c.get("mtime", 0.0) or 0.0
+            if cm > mt:
+                mt = cm
+        name = root.name if rel == "" else Path(rel).name
+        node = {"name": name, "type": "dir", "children": children, "mtime": mt}
         return node
 
-    for rel, entries in file_dirs.items():
-        d = ensure_chain(rel)
-        for e in entries:
-            d["children"].append(e)
+    node = build(base_rel, 0) or {
+        "name": root.name if base_rel == "" else Path(base_rel).name,
+        "type": "dir", "children": [], "mtime": 0.0,
+    }
 
-    def sort_node(n: dict):
-        n.pop("_linked", None)
-        if n["type"] == "dir":
-            n["children"].sort(key=lambda c: (c["type"] == "file", c["name"].lower()))
-            # Aggregate the max mtime of the contents (files + subdirs) onto the dir
-            # so the client can highlight folders that contain recently modified
-            # files; the max propagates to the parent so updates are reachable from
-            # the top level.
-            mt = 0.0
-            for c in n["children"]:
-                sort_node(c)
-                cm = c.get("mtime", 0.0) or 0.0
-                if cm > mt:
-                    mt = cm
-            n["mtime"] = mt
+    if use_cache:
+        _save_cache(root, new_cache)
 
-    sort_node(root_node)
-    root_node["gh_repos"] = _gh_repos_map(root)   # repo name -> GitHub blob base URL
-    # Per-project icon map (config.project_icons over baked-in REPO_ICON) for every
-    # top-level dir, so the client can show emoji icons with a colour-dot fallback.
-    icons: dict[str, str] = {}
-    for child in root_node["children"]:
-        if child.get("type") == "dir":
-            ic = project_icon(child["name"])
-            if ic:
-                icons[child["name"]] = ic
-    root_node["project_icons"] = icons
-    return root_node
+    if base_rel == "":
+        node["gh_repos"] = _gh_repos_map(root)   # repo name -> GitHub blob base URL
+        # Per-project icon map (config.project_icons over baked-in REPO_ICON) for
+        # every top-level dir, so the client shows emoji icons (colour-dot fallback).
+        icons: dict[str, str] = {}
+        for child in node["children"]:
+            if child.get("type") == "dir":
+                ic = project_icon(child["name"])
+                if ic:
+                    icons[child["name"]] = ic
+        node["project_icons"] = icons
+    return node
+
+
+def _dir_has_content(root: Path, rel: str, cache: dict, new_cache: dict) -> bool:
+    """True if `rel` (or any descendant, outside pruned dirs) holds a viewable
+    file. Used to decide whether a truncated (lazy) directory is worth showing.
+    Populates ``new_cache`` with every directory it scans so the work is not
+    repeated when the dir is later expanded."""
+    stack = [rel]
+    found = False
+    while stack:
+        cur = stack.pop()
+        dpath = root if cur == "" else root / cur
+        try:
+            mtime = dpath.stat().st_mtime
+        except OSError:
+            mtime = 0.0
+        cached = cache.get(cur)
+        if cached is not None and cached.get("mtime") == mtime:
+            files = cached.get("files", [])
+            child_dirs = cached.get("dirs", [])
+        else:
+            files, child_dirs, mtime = _scan_one_dir(root, cur)
+        if cur not in new_cache:
+            new_cache[cur] = {"mtime": mtime,
+                              "files": [dict(e) for e in files],
+                              "dirs": list(child_dirs)}
+        if files:
+            found = True
+            # keep scanning so the cache is filled, but we already know the answer
+        for d in child_dirs:
+            stack.append(d if cur == "" else f"{cur}/{d}")
+    return found
 
 
 _GH_REPOS: dict | None = None
