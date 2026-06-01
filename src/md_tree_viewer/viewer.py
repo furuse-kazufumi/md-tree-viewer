@@ -998,6 +998,106 @@ contentEl.addEventListener('click', (e) => {
 });
 
 document.getElementById('refresh').onclick = () => { treeEl.innerHTML='Rescanning...'; loadTree(true); };
+
+// ---- Settings panel (config GET/POST + theme) ---------------------------------
+const THEME_KEY = 'mdv_theme_v1';
+let serverCfg = null;          // last config_payload() from the server
+let draftExt = [], draftIcons = {};   // editable working copy
+
+function applyTheme(theme) {
+  document.body.classList.toggle('dark', theme === 'dark');
+  if (window.__mermaid) { try { window.__mermaid.initialize({ startOnLoad:false, theme: theme==='dark'?'dark':'neutral' }); } catch(e){} }
+}
+// Apply a locally remembered theme immediately (before the config fetch) so there is no flash.
+try { applyTheme(localStorage.getItem(THEME_KEY) || 'light'); } catch(e){}
+
+function renderExtList() {
+  const box = document.getElementById('extList'); box.innerHTML = '';
+  const renderable = (serverCfg && serverCfg.renderable_ext) || [];
+  draftExt.forEach((e, idx) => {
+    const row = document.createElement('div'); row.className = 'extitem';
+    const lbl = document.createElement('span'); lbl.textContent = e + (renderable.includes(e) ? '' : ' (OS-open)');
+    const x = document.createElement('span'); x.className = 'x'; x.textContent = '×'; x.title = 'remove';
+    x.onclick = () => { draftExt.splice(idx, 1); renderExtList(); };
+    row.appendChild(lbl); row.appendChild(x); box.appendChild(row);
+  });
+}
+function renderIconList() {
+  const box = document.getElementById('iconList'); box.innerHTML = '';
+  Object.keys(draftIcons).forEach(name => {
+    const row = document.createElement('div'); row.className = 'iconitem';
+    const em = document.createElement('span'); em.textContent = draftIcons[name];
+    const nm = document.createElement('span'); nm.textContent = name; nm.style.flex = '1';
+    const x = document.createElement('span'); x.className = 'x'; x.textContent = '×'; x.title = 'remove';
+    x.onclick = () => { delete draftIcons[name]; renderIconList(); };
+    row.appendChild(em); row.appendChild(nm); row.appendChild(x); box.appendChild(row);
+  });
+}
+function fillSettings(cfg) {
+  serverCfg = cfg;
+  draftExt = (cfg.view_ext || []).slice();
+  draftIcons = Object.assign({}, cfg.project_icons || {});
+  renderExtList(); renderIconList();
+  document.getElementById('enableOpen').checked = !!cfg.enable_open;
+  document.getElementById('themeSel').value = cfg.theme || 'light';
+  document.getElementById('cfgPath').textContent = cfg.config_path ? ('config: ' + cfg.config_path) : '';
+}
+async function loadConfig() {
+  try {
+    const r = await fetch('/api/config'); const cfg = await r.json();
+    fillSettings(cfg);
+    // Server config wins for theme; mirror to localStorage for flash-free reloads.
+    const theme = cfg.theme || (localStorage.getItem(THEME_KEY) || 'light');
+    try { localStorage.setItem(THEME_KEY, theme); } catch(e){}
+    applyTheme(theme);
+  } catch(e){}
+}
+document.getElementById('settingsBtn').onclick = () => {
+  document.getElementById('settings').classList.toggle('hidden');
+};
+document.getElementById('extAddBtn').onclick = () => {
+  let v = (document.getElementById('extAdd').value || '').trim().toLowerCase();
+  if (!v) return;
+  if (v[0] !== '.') v = '.' + v;
+  if (!draftExt.includes(v)) draftExt.push(v);
+  document.getElementById('extAdd').value = ''; renderExtList();
+};
+document.getElementById('iconAddBtn').onclick = () => {
+  const name = (document.getElementById('iconName').value || '').trim();
+  const em = (document.getElementById('iconEmoji').value || '').trim();
+  if (!name || !em) return;
+  draftIcons[name] = em;
+  document.getElementById('iconName').value = ''; document.getElementById('iconEmoji').value = '';
+  renderIconList();
+};
+document.getElementById('themeSel').onchange = (e) => {
+  const t = e.target.value; try { localStorage.setItem(THEME_KEY, t); } catch(_){}
+  applyTheme(t);
+};
+document.getElementById('saveCfg').onclick = async () => {
+  const msg = document.getElementById('cfgMsg'); msg.textContent = 'saving…';
+  const body = {
+    view_ext: draftExt,
+    project_icons: draftIcons,
+    enable_open: document.getElementById('enableOpen').checked,
+    theme: document.getElementById('themeSel').value,
+  };
+  try {
+    const r = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.ok) {
+      fillSettings(j.config);
+      const t = j.config.theme || 'light'; try { localStorage.setItem(THEME_KEY, t); } catch(_){}
+      applyTheme(t);
+      msg.textContent = 'saved.';
+      loadTree(true);   // view_ext / icons may have changed → rescan + redraw
+    } else {
+      msg.textContent = (j.error || ('failed (' + r.status + ')'));
+    }
+  } catch(e) { msg.textContent = 'request failed'; }
+};
+
+loadConfig();
 loadTree().then(() => { if (location.hash.length > 1) openByPath(pathFromHash()); });
 window.addEventListener('hashchange', () => {
   const p = pathFromHash();
