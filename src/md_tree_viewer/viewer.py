@@ -1708,7 +1708,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main(argv: list[str] | None = None) -> int:
-    global ROOT, VIEW_EXT, ENABLE_OPEN
+    global ROOT, VIEW_EXT, ENABLE_OPEN, USE_CACHE
     ap = argparse.ArgumentParser(
         prog="mdtree",
         description="Local web viewer for Markdown / PDF / SVG files under a directory tree.",
@@ -1723,6 +1723,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--enable-open", action="store_true",
                     help="allow POST /api/open to launch non-viewable files with their OS "
                          "association (default off; root-confined either way)")
+    ap.add_argument("--no-cache", action="store_true",
+                    help="disable the persistent scan cache (~/.md_tree_viewer/cache); "
+                         "every (re)scan walks the tree fresh")
     args = ap.parse_args(argv)
 
     ROOT = Path(args.root).resolve()
@@ -1738,7 +1741,9 @@ def main(argv: list[str] | None = None) -> int:
         VIEW_EXT = tuple(ext) if ext else DEFAULT_VIEW_EXT
     if args.enable_open:
         ENABLE_OPEN = True
-    _tree_cache["json"] = None
+    if args.no_cache:
+        USE_CACHE = False
+    _reset_tree_cache()
 
     url = f"http://127.0.0.1:{args.port}/"
 
