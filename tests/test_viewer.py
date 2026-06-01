@@ -105,7 +105,7 @@ def test_build_tree_prunes_noise_and_non_viewable(sample_tree):
 
 def test_safe_resolve_blocks_traversal_and_bad_ext(sample_tree):
     assert viewer._safe_resolve("README.md") is not None
-    assert viewer._safe_resolve("secret.txt") is None          # not a viewable ext
+    assert viewer._safe_resolve("secret.dat") is None          # not a viewable ext
     assert viewer._safe_resolve("../../etc/passwd") is None     # path traversal
     assert viewer._safe_resolve("does/not/exist.md") is None
 
