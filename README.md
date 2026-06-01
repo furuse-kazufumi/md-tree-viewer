@@ -12,8 +12,12 @@ directory tree. Point it at a folder full of docs and browse them by
   - Markdown with GitHub-flavored tables, code, **Mermaid** diagrams, and CJK text
   - PDF embedded in the page
   - SVG shown as an image
-- **Fast & quiet** — dependency dirs, virtualenvs, caches and `.git` are skipped
-  while scanning, so a tree with thousands of files stays responsive.
+- **Fast startup, even on huge trees** — the tree loads **lazily** (only the top
+  couple of levels up front; deeper folders are fetched when you expand them) and
+  a **persistent scan cache** re-scans only the directories that changed since
+  last time, so startup cost is bounded by the breadth of the top levels rather
+  than the total file count. Dependency dirs, virtualenvs, caches and `.git` are
+  skipped while scanning, and you can add your own folder names to skip.
 - **Recently opened / Recently modified** quick sections, and folders that
   contain recently changed files are highlighted so you can find your active work.
 - **Configurable** — viewable extensions, per-project emoji icons, light/dark
