@@ -88,6 +88,33 @@ For each `.md` file the viewer reads only the head of the file and extracts:
   `.md`/`.pdf` open in the viewer; anything else links to the file on GitHub
   **if** the containing repository has a GitHub `origin` remote.
 
+### Content types
+
+A built-in **content-type registry** maps each file extension to how it is
+rendered and the exact HTTP `Content-Type` it is served with. Only *safe* types
+— ones a browser displays natively **without executing embedded script** — are
+rendered inline:
+
+| Kind  | Extensions (examples) | Rendered as |
+|-------|-----------------------|-------------|
+| Markdown | `.md` `.markdown` | GFM + Mermaid (marked.js) |
+| PDF   | `.pdf` | embedded `<iframe>` |
+| Image | `.svg` `.png` `.jpg` `.gif` `.webp` `.avif` `.bmp` `.ico` | `<img>` (no script execution) |
+| Video | `.mp4` `.webm` `.ogv` | `<video controls>` |
+| Audio | `.mp3` `.wav` `.ogg` `.m4a` `.flac` | `<audio controls>` |
+| Text / code | `.txt` `.json` `.csv` `.xml` `.yaml` `.toml` `.ini` `.log` `.py` `.js` `.ts` `.c` `.cpp` `.rs` `.go` `.java` `.sh` `.bat` `.ps1` … | **HTML-escaped** `<pre>` |
+
+Each raw response carries the registry's exact `Content-Type` plus
+`X-Content-Type-Options: nosniff` and `Content-Disposition: inline`. Text/code
+(and any unknown extension) is served as `text/plain` — **never `text/html`** —
+and the client **HTML-escapes** the body before showing it, so a `<script>`
+inside a `.txt`/`.json` is displayed as text and never runs.
+
+> **SVG and HTML:** SVG is rendered via `<img>`, which cannot run script. HTML is
+> deliberately **not** in the registry (a future release will sandbox HTML/SVG in
+> an `<iframe>`); a `.html` added to `view_ext` is treated as non-viewable
+> (OS-open only), so it is never injected into the viewer's own page.
+
 ### Settings
 
 Open the **⚙️ settings panel** in the top-left to change, and persist:
