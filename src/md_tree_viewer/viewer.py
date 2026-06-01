@@ -329,19 +329,31 @@ def _build_tree(root: Path) -> dict:
                 mtime = full.stat().st_mtime
             except OSError:
                 mtime = 0.0
+            renderable = ext in RENDERABLE_EXT
+            if ext == ".pdf":
+                kind = "pdf"
+            elif ext == ".svg":
+                kind = "svg"
+            elif ext in (".md", ".markdown"):
+                kind = "md"
+            else:
+                kind = "other"   # listed via config but not rendered inline
             entry = {
                 "name": f,
                 "path": (f if rel == "" else f"{rel}/{f}"),
                 "type": "file",
-                "ext": "pdf" if ext == ".pdf" else ("svg" if ext == ".svg" else "md"),
+                "ext": kind,
+                "renderable": renderable,
                 "mtime": mtime,
             }
             if ext == ".pdf":
                 entry["title"], entry["desc"] = f, "(PDF)"
             elif ext == ".svg":
                 entry["title"], entry["desc"] = f, "(SVG image)"
-            else:
+            elif kind == "md":
                 md_jobs.append((entry, full))
+            else:
+                entry["title"], entry["desc"] = f, f"({ext.lstrip('.').upper() or 'file'})"
             file_dirs.setdefault(rel, []).append(entry)
 
     # Extract title/desc for .md files in parallel (fast for 1000+ files).
