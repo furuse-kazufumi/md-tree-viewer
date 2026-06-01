@@ -194,7 +194,35 @@ def _coerce_config(raw: dict) -> dict:
     theme = raw.get("theme")
     if isinstance(theme, str) and theme in ("light", "dark"):
         cfg["theme"] = theme
+    ignore = _normalise_ignore_list(raw.get("ignore"))
+    if ignore:
+        cfg["ignore"] = ignore
     return cfg
+
+
+def _normalise_ignore_list(value) -> list[str]:
+    """Coerce an `ignore` value into a clean list of bare directory NAMES.
+
+    Only simple names are accepted — any token containing a path separator
+    (``/``, ``\\``) or path-traversal (``..``) is dropped, so the ignore list can
+    only ever *exclude* directories from the scan and can never be turned into a
+    path/escape primitive. Lower-cased, de-duplicated, order preserved."""
+    if isinstance(value, str):
+        items = re.split(r"[,\s]+", value)
+    elif isinstance(value, (list, tuple)):
+        items = value
+    else:
+        return []
+    out: list[str] = []
+    for it in items:
+        n = str(it).strip().lower()
+        if not n or n in ("..", "."):
+            continue
+        if "/" in n or "\\" in n:
+            continue
+        if n not in out:
+            out.append(n)
+    return out
 
 
 def _read_config_file() -> dict:
