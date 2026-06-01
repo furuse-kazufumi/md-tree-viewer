@@ -87,6 +87,19 @@ VIEW_EXT: tuple[str, ...] = DEFAULT_VIEW_EXT
 # VIEW_EXT, is "non-viewable" and can only be opened via OS association).
 RENDERABLE_EXT = (".md", ".markdown", ".pdf", ".svg")
 
+# Extensions that the OS "open" association would EXECUTE rather than view
+# (ShellExecute on Windows runs these). POST /api/open refuses them so the
+# OS-association feature cannot become a one-click code-execution primitive for a
+# malicious file that happens to sit under the root. This is a hard server-side
+# deny-list independent of VIEW_EXT (config cannot widen it).
+EXECUTABLE_EXT = frozenset({
+    ".exe", ".com", ".scr", ".pif", ".cpl", ".msi", ".msp", ".mst",
+    ".bat", ".cmd", ".ps1", ".psm1", ".psd1", ".ps1xml", ".vbs", ".vbe",
+    ".js", ".jse", ".wsf", ".wsh", ".ws", ".hta", ".sct",
+    ".lnk", ".url", ".reg", ".inf", ".scf", ".jar", ".gadget", ".application",
+    ".msc", ".sh", ".bash", ".zsh", ".command", ".app", ".dll", ".sys", ".drv",
+})
+
 # Per-project (top-level dir) emoji icons baked into a distribution. The OSS
 # package ships an EMPTY map so it never hard-codes anyone's project names; a
 # private/local build may seed this with its own defaults. config.project_icons
