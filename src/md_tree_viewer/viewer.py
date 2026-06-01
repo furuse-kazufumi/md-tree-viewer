@@ -505,6 +505,10 @@ INDEX_HTML = r"""<!DOCTYPE html>
 </script>
 <style>
   :root { --bg:#fff; --fg:#24292f; --side:#f6f8fa; --border:#d0d7de; --accent:#0969da; --muted:#8b949e; }
+  body.dark { --bg:#0d1117; --fg:#c9d1d9; --side:#161b22; --border:#30363d; --accent:#58a6ff; --muted:#8b949e; }
+  body.dark { background:var(--bg); }
+  body.dark #content pre, body.dark #content th { background:#161b22; }
+  body.dark #content code { background:rgba(110,118,129,.4); }
   * { box-sizing: border-box; }
   /* Kill scrolling on the outer html/body and confine vertical scroll to the
      inner panes (#tree / #content). Avoids a second scrollbar when 100vh is
