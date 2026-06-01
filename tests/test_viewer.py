@@ -631,15 +631,18 @@ def test_shallow_build_emits_lazy_stub_for_deep_dirs(deep_tree):
 
 
 def test_shallow_build_does_not_walk_deeper_than_limit(deep_tree, monkeypatch):
-    """The shallow walk must not _extract_meta deep files (proof the deep dir is
-    not scanned for content during a shallow build)."""
+    """A shallow build must not _extract_meta files below the depth limit — proof
+    the deep directories are not scanned for content (only existence-probed). With
+    max_depth=1, root + its immediate child dirs (docs) are scanned, but the deep
+    chain docs/sub/deep is not."""
     seen = []
     real = viewer._extract_meta
     monkeypatch.setattr(viewer, "_extract_meta", lambda p: (seen.append(str(p)), real(p))[1])
-    # max_depth=1: only root + its immediate children are scanned for content.
     viewer._build_tree(deep_tree, max_depth=1, use_cache=False)
+    # docs/sub/deep/deepfile.md is 3 levels down → never read for metadata.
     assert not any("deepfile.md" in s for s in seen)
-    assert not any("guide.md" in s for s in seen)   # docs/* is below depth 1
+    # docs/guide.md lives in a depth-1 directory → it IS scanned (expected).
+    assert any("guide.md" in s for s in seen)
 
 
 def test_lazy_subtree_endpoint_returns_children(deep_tree):
