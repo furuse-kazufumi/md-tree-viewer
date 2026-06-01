@@ -717,17 +717,77 @@ def _gh_repos_map(root: Path | None = None) -> dict:
     return _GH_REPOS
 
 
+# Default depth of the initial (lazy) tree the client loads at startup. Only the
+# top ~2 levels are walked; deeper dirs arrive as lazy stubs and are fetched on
+# expansion, so startup cost is bounded by the breadth of the shallow levels
+# rather than the total file count.
+SHALLOW_DEPTH = 2
+
+# Two independent in-memory caches of rendered JSON:
+#   _tree_cache       → the shallow startup tree (GET /api/tree)
+#   _full_tree_cache  → the complete tree (GET /api/tree?full=1, used for search)
+# Both expire after _TREE_TTL so reloads pick up new files; ?fresh=1 forces a
+# rebuild. The persistent per-dir cache underneath makes those rebuilds cheap.
 _tree_cache = {"json": None, "ts": 0.0}
+_full_tree_cache = {"json": None, "ts": 0.0}
 _TREE_TTL = 5.0  # rescan after this many seconds → new/updated files show up on reload
 
 
-def _tree_json(force: bool = False) -> str:
+def _reset_tree_cache() -> None:
+    """Invalidate both in-memory rendered-tree caches (e.g. after a config POST
+    that may change view_ext / ignore)."""
+    _tree_cache["json"] = None
+    _full_tree_cache["json"] = None
+
+
+def _tree_json(force: bool = False, full: bool = False) -> str:
+    """Rendered JSON for GET /api/tree. ``full`` returns the complete tree (for
+    client-side search); otherwise the shallow startup tree (lazy beyond
+    SHALLOW_DEPTH). ``force`` (=?fresh=1) bypasses the TTL."""
     import time
     now = time.monotonic()
-    if force or _tree_cache["json"] is None or (now - _tree_cache["ts"]) > _TREE_TTL:
-        _tree_cache["json"] = json.dumps(_build_tree(ROOT), ensure_ascii=False)
-        _tree_cache["ts"] = now
-    return _tree_cache["json"]
+    cache = _full_tree_cache if full else _tree_cache
+    if force or cache["json"] is None or (now - cache["ts"]) > _TREE_TTL:
+        depth = None if full else SHALLOW_DEPTH
+        cache["json"] = json.dumps(_build_tree(ROOT, max_depth=depth), ensure_ascii=False)
+        cache["ts"] = now
+    return cache["json"]
+
+
+def _subtree_json(rel: str) -> str | None:
+    """Rendered JSON for the lazy GET /api/tree?path=<dir>: the immediate children
+    of one root-confined, non-pruned directory (its own grandchildren arrive as
+    lazy stubs). Returns None when the path is outside the root, missing, or inside
+    a pruned/hidden directory (caller maps that to 404), so this endpoint honours
+    the exact same boundary as _safe_resolve."""
+    base = _safe_resolve_dir(rel)
+    if base is None:
+        return None
+    norm = str(base.relative_to(ROOT.resolve())).replace("\\", "/")
+    if norm == ".":
+        norm = ""
+    node = _build_tree(ROOT, max_depth=1, base_rel=norm)
+    return json.dumps(node, ensure_ascii=False)
+
+
+def _safe_resolve_dir(rel: str) -> Path | None:
+    """Resolve a request path to an existing DIRECTORY under ROOT that is not a
+    pruned/hidden dir. Returns None on traversal, a missing/non-directory target,
+    or any pruned component (including the directory's own name). Used by the lazy
+    subtree endpoint. The empty string resolves to ROOT itself."""
+    try:
+        target = (ROOT / rel).resolve()
+        relpath = target.relative_to(ROOT.resolve())
+    except (ValueError, OSError):
+        return None
+    if not target.is_dir():
+        return None
+    # Check EVERY component (including the leaf dir name), unlike _in_pruned_dir
+    # which treats the leaf as a filename.
+    for part in relpath.parts:
+        if _skip_dir(part):
+            return None
+    return target
 
 
 def _in_pruned_dir(target: Path) -> bool:
