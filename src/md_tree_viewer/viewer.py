@@ -103,8 +103,12 @@ NOISE_DIRS = {
 #                             inside a .txt/.json is shown as text, never run)
 #   - md     → marked.js (existing GFM/Mermaid renderer)
 #   - pdf    → <iframe>   (existing)
-#   - svg    → <img>      (existing; v0.4 leaves SVG on the <img> path — a future
-#                          increment sandboxes it in an <iframe>)
+#   - svg    → <img>      (existing; the viewer renders SVG via an inert <img>.
+#                          v0.4 additionally hardens the /api/raw response for
+#                          SVG with a script-blocking CSP + sandbox so a direct
+#                          top-level navigation to the raw URL also cannot run
+#                          embedded <script>; a future increment moves SVG to a
+#                          fully sandboxed <iframe> render.)
 # Each entry is (kind, mime). The `kind` drives the client renderer; the `mime`
 # is the exact Content-Type /api/raw sends (always with X-Content-Type-Options:
 # nosniff + Content-Disposition: inline so the browser does not MIME-sniff a
