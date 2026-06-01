@@ -78,11 +78,67 @@ For each `.md` file the viewer reads only the head of the file and extracts:
   `.md`/`.pdf` open in the viewer; anything else links to the file on GitHub
   **if** the containing repository has a GitHub `origin` remote.
 
+### Settings
+
+Open the **⚙️ settings panel** in the top-left to change, and persist:
+
+- **Viewable extensions** — add or remove the file types shown in the tree.
+  `md` / `markdown` / `pdf` / `svg` render inline; any other listed type (e.g.
+  `.rst`, `.txt`) appears in the tree but opens via the OS association (see
+  below). Also settable per run with `--ext`.
+- **Project icons** — assign an emoji to a top-level directory
+  (`{"<dir>": "<emoji>"}`). The tree shows that emoji; unset projects fall back
+  to a deterministic colour dot, so you can always tell projects apart.
+- **OS-association open** — toggle whether non-viewable files can be launched.
+- **Theme** — light or dark.
+
+Settings are saved by the server to a **single config file**, searched/written in
+this order: `<root>/.mdtree.json`, then `~/.md_tree_viewer.json`. The schema:
+
+```json
+{
+  "view_ext": [".md", ".markdown", ".pdf", ".svg"],
+  "project_icons": { "docs": "📘" },
+  "enable_open": false,
+  "theme": "light"
+}
+```
+
+### Opening non-viewable files (OS association)
+
+A file type listed in `view_ext` but not rendered inline (e.g. `.xlsx`) can be
+launched with the machine's default application via `POST /api/open?path=…`
+(`os.startfile` on Windows, `open` on macOS, `xdg-open` on Linux).
+
+- **Disabled by default in this package.** It is only enabled when the server is
+  started with `--enable-open` or `enable_open: true` in the config; otherwise
+  the endpoint returns **403**. This is deliberate: launching files on the host
+  is unsafe to expose unconditionally, so an OSS deployment stays off unless the
+  operator opts in. (A private/local build of the same code may instead default
+  it on for personal convenience — that on/off default is the only behavioural
+  difference between the two builds.)
+- The path is **confined to the root** and must be an existing file. The server
+  passes a single validated path to the launcher (never a shell string), so it
+  does not create an arbitrary-command-execution surface.
+
 ### Security
 
-- The server is **read-only** (HTTP `GET` only) and binds to `127.0.0.1`.
-- Only `.md` / `.markdown` / `.pdf` / `.svg` files **under the root** are served.
-  Requests are resolved against the root and **path traversal is rejected**.
+This release adds two write paths to what was previously a GET-only server. The
+read-only model is preserved everywhere except those two, narrowly-scoped,
+endpoints:
+
+- The server binds to `127.0.0.1` (local only).
+- **Reads** (`GET /api/file`, `/api/raw`): only files **under the root** whose
+  extension is in the active `view_ext` are served. Requests are resolved against
+  the root and **path traversal is rejected**.
+- **The only write endpoint is `POST /api/config`,** and it writes **exactly one
+  file** — the config file described above — and nothing else. The request body
+  is sanitised to a fixed set of known keys (`view_ext`, `project_icons`,
+  `enable_open`, `theme`); unknown keys and malformed values are dropped, so a
+  request cannot stash arbitrary data or influence any other path. There is no
+  endpoint that writes any file you choose.
+- **`POST /api/open`** does not write files; it launches a root-confined existing
+  file with its OS association and is **off by default** (see above).
 
 ## Why
 
