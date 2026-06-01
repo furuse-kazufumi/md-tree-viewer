@@ -931,11 +931,79 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_json(self, code, obj):
+        self._send(code, json.dumps(obj, ensure_ascii=False).encode("utf-8"),
+                   "application/json; charset=utf-8")
+
+    def _read_json_body(self) -> dict | None:
+        """Read and JSON-parse the request body. Returns None on a missing/oversized
+        body or invalid JSON (caller maps that to a 400). 256 KiB cap is generous
+        for a config file and bounds memory."""
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except (TypeError, ValueError):
+            return None
+        if length <= 0 or length > 256 * 1024:
+            return None
+        try:
+            raw = self.rfile.read(length)
+            data = json.loads(raw.decode("utf-8"))
+        except (OSError, ValueError):
+            return None
+        return data if isinstance(data, dict) else None
+
+    def do_POST(self):
+        p = urlparse(self.path)
+        if p.path == "/api/config":
+            self._handle_post_config()
+        elif p.path == "/api/open":
+            self._handle_post_open(p)
+        else:
+            self._send(404, b"not found", "text/plain; charset=utf-8")
+
+    def _handle_post_config(self):
+        """The ONLY write endpoint. Sanitises the body to known keys, persists it
+        to the single config file (CONFIG_PATH) and applies it in memory. No other
+        path is ever written."""
+        body = self._read_json_body()
+        if body is None:
+            self._send_json(400, {"ok": False, "error": "invalid JSON body"})
+            return
+        cfg = _coerce_config(body)
+        try:
+            _write_config_file(cfg)
+        except OSError as e:
+            self._send_json(500, {"ok": False, "error": f"could not write config: {e}"})
+            return
+        _apply_config(cfg)
+        _tree_cache["json"] = None   # view_ext / icons may have changed → rescan
+        self._send_json(200, {"ok": True, "config": config_payload()})
+
+    def _handle_post_open(self, p):
+        """OS-association launch of a root-confined file. Disabled (403) unless
+        ENABLE_OPEN is on. Never executes a shell string; only a validated path."""
+        if not ENABLE_OPEN:
+            self._send_json(403, {"ok": False, "error": "open is disabled (start with --enable-open)"})
+            return
+        rel = (parse_qs(p.query).get("path") or [""])[0]
+        target = _safe_open_resolve(rel)
+        if target is None:
+            self._send_json(404, {"ok": False, "error": "not found or not allowed"})
+            return
+        try:
+            _os_open(target)
+        except OSError as e:
+            self._send_json(500, {"ok": False, "error": f"could not open: {e}"})
+            return
+        self._send_json(200, {"ok": True, "path": rel})
+
     def do_GET(self):
         p = urlparse(self.path)
         if p.path == "/":
             self._send(200, INDEX_HTML.replace("__ROOT__", str(ROOT)).encode("utf-8"),
                        "text/html; charset=utf-8")
+        elif p.path == "/api/config":
+            self._send_json(200, config_payload())
         elif p.path == "/api/tree":
             force = bool(parse_qs(p.query).get("fresh"))
             self._send(200, _tree_json(force).encode("utf-8"), "application/json; charset=utf-8")
