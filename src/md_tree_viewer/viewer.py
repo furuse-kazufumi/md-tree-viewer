@@ -711,6 +711,16 @@ INDEX_HTML = r"""<!DOCTYPE html>
   <div id="content"><div class="empty">Select a file from the tree on the left.</div></div>
 </div>
 <script>
+// The CSRF token is embedded in the page (same-origin only). Every POST sends it
+// back in the X-CSRF-Token header; a custom header forces a CORS pre-flight on
+// cross-origin requests, so a malicious page cannot forge a state-changing POST.
+const CSRF_TOKEN = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+function postJSON(url, body) {
+  const headers = { 'X-CSRF-Token': CSRF_TOKEN };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  return fetch(url, { method: 'POST', headers,
+    body: body === undefined ? undefined : JSON.stringify(body) });
+}
 const treeEl = document.getElementById('tree');
 const contentEl = document.getElementById('content');
 const countEl = document.getElementById('count');
