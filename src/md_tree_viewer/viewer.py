@@ -1184,15 +1184,35 @@ function renderRecent() {
 
 function collectFlat(node) {
   if (node.type === 'file') { flatFiles.push(node); return; }
-  for (const c of node.children) collectFlat(c);
+  for (const c of (node.children || [])) collectFlat(c);
+}
+
+// The shallow startup tree only contains files in the top ~2 levels, so search
+// and the full "recently modified" list need the complete tree. We fetch it once
+// (lazily, on first search) and cache it; ?full=1 is cheap server-side thanks to
+// the persistent per-dir cache.
+let fullFlatFiles = null, fullTreePromise = null;
+function ensureFullTree() {
+  if (fullFlatFiles) return Promise.resolve(fullFlatFiles);
+  if (fullTreePromise) return fullTreePromise;
+  fullTreePromise = fetch('/api/tree?full=1').then(r => r.json()).then(full => {
+    const acc = []; (function walk(n){ if (n.type === 'file') { acc.push(n); return; }
+      for (const c of (n.children || [])) walk(c); })(full);
+    fullFlatFiles = acc; return acc;
+  }).catch(() => { fullTreePromise = null; return flatFiles; });
+  return fullTreePromise;
 }
 
 async function loadTree(fresh) {
+  // Shallow tree: only the top levels are walked; deeper dirs arrive as lazy
+  // stubs and are fetched on expansion (startup cost is bounded, not O(files)).
   const r = await fetch('/api/tree' + (fresh ? '?fresh=1' : '')); treeData = await r.json();
-  flatFiles = []; collectFlat(treeData);
+  flatFiles = []; collectFlat(treeData);            // files in the shallow levels only
+  fullFlatFiles = null; fullTreePromise = null;     // invalidate the full-tree cache
   openDirs = loadSet(OPEN_KEY); collapsedRecent = loadSet(CR_KEY);
   treeEl.innerHTML = '';
-  if (!flatFiles.length) { treeEl.innerHTML = '<div class="empty">No files to show.</div>'; return; }
+  const hasTop = (treeData.children || []).length > 0;
+  if (!hasTop) { treeEl.innerHTML = '<div class="empty">No files to show.</div>'; return; }
   recentWrap = document.createElement('ul'); recentWrap.id = 'recentWrap'; treeEl.appendChild(recentWrap);
   projWrap = document.createElement('ul'); treeEl.appendChild(projWrap);
   resultsEl = document.createElement('div'); resultsEl.id = 'results'; resultsEl.style.display = 'none';
@@ -1201,7 +1221,10 @@ async function loadTree(fresh) {
   for (const c of treeData.children) frag.appendChild(makeChild(c, ''));  // collapsed by default = only top level rendered
   projWrap.appendChild(frag);
   renderRecent();
-  countEl.textContent = flatFiles.length + ' files';
+  countEl.textContent = '…';
+  // Populate the count + the full "recently modified" list from the complete tree
+  // in the background, without blocking the shallow render.
+  ensureFullTree().then(all => { countEl.textContent = all.length + ' files'; renderRecent(); });
   lastLoad = performance.now();
 }
 
