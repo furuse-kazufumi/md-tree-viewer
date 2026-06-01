@@ -262,12 +262,13 @@ def _write_config_file(cfg: dict) -> None:
 def _apply_config(cfg: dict) -> None:
     """Apply a sanitised config to the in-memory globals (VIEW_EXT, REPO_ICON
     precedence is resolved at lookup time, ENABLE_OPEN)."""
-    global VIEW_EXT, ENABLE_OPEN, CONFIG
+    global VIEW_EXT, ENABLE_OPEN, CONFIG, IGNORE_DIRS
     CONFIG = cfg
     ext = cfg.get("view_ext")
     VIEW_EXT = tuple(ext) if ext else DEFAULT_VIEW_EXT
     if "enable_open" in cfg:
         ENABLE_OPEN = bool(cfg["enable_open"])
+    IGNORE_DIRS = frozenset(cfg.get("ignore") or ())
 
 
 def load_config(root: Path) -> dict:
