@@ -1456,7 +1456,7 @@ document.getElementById('refresh').onclick = () => { treeEl.innerHTML='Rescannin
 // ---- Settings panel (config GET/POST + theme) ---------------------------------
 const THEME_KEY = 'mdv_theme_v1';
 let serverCfg = null;          // last config_payload() from the server
-let draftExt = [], draftIcons = {};   // editable working copy
+let draftExt = [], draftIcons = {}, draftIgnore = [];   // editable working copy
 
 function applyTheme(theme) {
   document.body.classList.toggle('dark', theme === 'dark');
