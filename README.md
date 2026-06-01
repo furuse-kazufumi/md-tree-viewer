@@ -93,9 +93,11 @@ For each `.md` file the viewer reads only the head of the file and extracts:
 Open the **⚙️ settings panel** in the top-left to change, and persist:
 
 - **Viewable extensions** — add or remove the file types shown in the tree.
-  `md` / `markdown` / `pdf` / `svg` render inline; any other listed type (e.g.
-  `.rst`, `.txt`) appears in the tree but opens via the OS association (see
-  below). Also settable per run with `--ext`.
+  Markdown, PDF, SVG, images, video, audio and text/code render **inline** (the
+  default set covers every safe content type the viewer knows how to display);
+  any other listed type (one not in the content-type registry) appears in the
+  tree but opens via the OS association (see below). Also settable per run with
+  `--ext`.
 - **Project icons** — assign an emoji to a top-level directory
   (`{"<dir>": "<emoji>"}`). The tree shows that emoji; unset projects fall back
   to a deterministic colour dot, so you can always tell projects apart.
