@@ -1007,3 +1007,75 @@ def test_html_extension_not_rendered_inline(media_tree, monkeypatch):
     page = [n for n in _iter_files(tree) if n["name"] == "page.html"][0]
     assert page["ext"] == "other"
     assert page["renderable"] is False
+
+
+def test_raw_headers_for_ext_svg_gets_script_blocking_csp():
+    """A scriptable-document kind (SVG) gets a script-blocking CSP + sandbox on its
+    /api/raw response, on top of the universal nosniff + inline disposition. Inert
+    kinds (image/video/audio/text/pdf/unknown) do NOT get a CSP — adding one would
+    not help them and could disturb the viewer's own <img>/<video>/<iframe>
+    render path."""
+    svg_headers = viewer._raw_headers_for_ext(".svg")
+    assert svg_headers["X-Content-Type-Options"] == "nosniff"
+    assert svg_headers["Content-Disposition"] == "inline"
+    csp = svg_headers["Content-Security-Policy"]
+    assert "script-src 'none'" in csp
+    assert "sandbox" in csp
+    # No script-blocking CSP on inert kinds (so media/pdf rendering is untouched).
+    for ext in (".png", ".mp4", ".mp3", ".txt", ".json", ".py", ".pdf", ".zzz"):
+        h = viewer._raw_headers_for_ext(ext)
+        assert h["X-Content-Type-Options"] == "nosniff", ext
+        assert h["Content-Disposition"] == "inline", ext
+        assert "Content-Security-Policy" not in h, ext
+
+
+def test_raw_svg_response_neutralises_embedded_script(sample_tree):
+    """Regression for the v0.4 SVG residual: a direct top-level GET of
+    /api/raw?path=*.svg can no longer run an embedded <script> in the viewer's
+    loopback origin, because the response carries script-src 'none' + sandbox.
+    The body is still served verbatim with image/svg+xml (the inert <img> render
+    path is unaffected), but the script is neutralised at the document level."""
+    # Plant an SVG whose body carries a script payload (the same-origin escalation
+    # vector from the verify finding).
+    (sample_tree / "docs" / "evil.svg").write_text(
+        "<svg xmlns='http://www.w3.org/2000/svg'>"
+        "<script>fetch('/api/config').then(r=>r.json()).then(c=>"
+        "fetch('/api/config',{method:'POST',headers:{'x-csrf-token':c.csrf_token},"
+        "body:'{}'}));</script></svg>",
+        encoding="utf-8",
+    )
+    server, port = _serve(sample_tree)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        with urlopen(base + "/api/raw?path=docs/evil.svg") as r:
+            assert r.status == 200
+            assert r.headers["Content-Type"] == "image/svg+xml"
+            assert r.headers["X-Content-Type-Options"] == "nosniff"
+            csp = r.headers["Content-Security-Policy"]
+            assert csp is not None, "SVG raw response must carry a CSP"
+            assert "script-src 'none'" in csp
+            assert "sandbox" in csp
+            body = r.read().decode("utf-8")
+        # Body is served verbatim (the <img> render path still works); the CSP —
+        # not body rewriting — is what neutralises the embedded script.
+        assert "<script>" in body
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_raw_pdf_and_media_have_no_csp_so_rendering_unaffected(media_tree):
+    """Defence-in-depth must not regress normal viewing: the PDF iframe body and
+    the media bodies are served WITHOUT a script-blocking CSP/sandbox (which would
+    otherwise break the browser's built-in PDF viewer or media playback)."""
+    (media_tree / "doc.pdf").write_bytes(b"%PDF-1.4\n%%EOF\n")
+    server, port = _serve(media_tree)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        for path in ("doc.pdf", "pic.png", "clip.mp4", "tune.mp3", "data.json"):
+            with urlopen(base + "/api/raw?path=" + urllib.parse.quote(path)) as r:
+                assert r.headers["X-Content-Type-Options"] == "nosniff", path
+                assert r.headers.get("Content-Security-Policy") is None, path
+    finally:
+        server.shutdown()
+        server.server_close()
