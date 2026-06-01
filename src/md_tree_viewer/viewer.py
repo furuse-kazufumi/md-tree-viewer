@@ -1487,11 +1487,22 @@ function renderIconList() {
     row.appendChild(em); row.appendChild(nm); row.appendChild(x); box.appendChild(row);
   });
 }
+function renderIgnoreList() {
+  const box = document.getElementById('ignoreList'); box.innerHTML = '';
+  draftIgnore.forEach((name, idx) => {
+    const row = document.createElement('div'); row.className = 'extitem';
+    const lbl = document.createElement('span'); lbl.textContent = name;
+    const x = document.createElement('span'); x.className = 'x'; x.textContent = '×'; x.title = 'remove';
+    x.onclick = () => { draftIgnore.splice(idx, 1); renderIgnoreList(); };
+    row.appendChild(lbl); row.appendChild(x); box.appendChild(row);
+  });
+}
 function fillSettings(cfg) {
   serverCfg = cfg;
   draftExt = (cfg.view_ext || []).slice();
   draftIcons = Object.assign({}, cfg.project_icons || {});
-  renderExtList(); renderIconList();
+  draftIgnore = (cfg.ignore || []).slice();
+  renderExtList(); renderIconList(); renderIgnoreList();
   document.getElementById('enableOpen').checked = !!cfg.enable_open;
   document.getElementById('themeSel').value = cfg.theme || 'light';
   document.getElementById('cfgPath').textContent = cfg.config_path ? ('config: ' + cfg.config_path) : '';
