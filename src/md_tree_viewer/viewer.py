@@ -1220,14 +1220,88 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return data if isinstance(data, dict) else None
 
+    # --- request-origin / CSRF guards for state-changing requests --------------
+    def _host_ok(self) -> bool:
+        """Validate the Host header so a DNS-rebinding name that resolves to
+        127.0.0.1 cannot reach the local server. Only loopback literals (with the
+        bound port, or no port) are accepted."""
+        host = (self.headers.get("Host") or "").strip()
+        if not host:
+            return False
+        # Strip a trailing :port and bracketed IPv6.
+        hostname, _, port = host.rpartition(":")
+        if not hostname:                       # no colon → rpartition put it all in `port`
+            hostname, port = host, ""
+        hostname = hostname.strip("[]").lower()
+        if port and port not in ("", str(BOUND_PORT)):
+            return False
+        if hostname in ("localhost",):
+            return True
+        try:
+            return ipaddress.ip_address(hostname).is_loopback
+        except ValueError:
+            return False
+
+    def _origin_ok(self) -> bool:
+        """Validate Origin (or, failing that, Referer): cross-origin pages are
+        rejected. A missing Origin/Referer is allowed because the CSRF-token
+        header is the primary defence and same-origin fetches do not always set
+        Origin; the token check still gates those."""
+        for header in ("Origin", "Referer"):
+            val = (self.headers.get(header) or "").strip()
+            if not val:
+                continue
+            try:
+                u = urlparse(val)
+            except ValueError:
+                return False
+            if u.scheme not in ("http", "https"):
+                return False
+            hostname = (u.hostname or "").lower()
+            if u.port not in (None, BOUND_PORT):
+                return False
+            if hostname == "localhost":
+                return True
+            try:
+                if ipaddress.ip_address(hostname).is_loopback:
+                    return True
+            except ValueError:
+                pass
+            return False           # header present but not same-origin loopback → reject
+        return True                # no Origin/Referer → defer to the token check
+
+    def _csrf_ok(self) -> bool:
+        """The X-CSRF-Token header must match the per-process token. Constant-time
+        compare. A custom header cannot be set by a cross-origin 'simple request',
+        so this is the core CSRF defence."""
+        sent = self.headers.get("X-CSRF-Token") or ""
+        return bool(sent) and secrets.compare_digest(sent, CSRF_TOKEN)
+
+    def _reject_cross_site(self) -> bool:
+        """Run all guards for a state-changing POST. On failure, send 403 and
+        return True (caller must stop). Fail-closed."""
+        if not self._host_ok():
+            self._send_json(403, {"ok": False, "error": "bad Host header"})
+            return True
+        if not self._origin_ok():
+            self._send_json(403, {"ok": False, "error": "cross-origin request rejected"})
+            return True
+        if not self._csrf_ok():
+            self._send_json(403, {"ok": False, "error": "missing or invalid CSRF token"})
+            return True
+        return False
+
     def do_POST(self):
         p = urlparse(self.path)
+        if p.path not in ("/api/config", "/api/open"):
+            self._send(404, b"not found", "text/plain; charset=utf-8")
+            return
+        if self._reject_cross_site():
+            return
         if p.path == "/api/config":
             self._handle_post_config()
-        elif p.path == "/api/open":
-            self._handle_post_open(p)
         else:
-            self._send(404, b"not found", "text/plain; charset=utf-8")
+            self._handle_post_open(p)
 
     def _handle_post_config(self):
         """The ONLY write endpoint. Sanitises the body to known keys, persists it
