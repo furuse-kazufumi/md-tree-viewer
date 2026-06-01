@@ -362,3 +362,166 @@ def test_load_config_applies_file(tmp_path, monkeypatch):
     assert viewer.VIEW_EXT == (".md", ".org")
     assert viewer.ENABLE_OPEN is True
     assert viewer.CONFIG_PATH == tmp_path / ".mdtree.json"
+
+
+# --------------------------------------------------------------------------- #
+# v0.2.1 security hardening: pruned-dir read containment, executable-open
+# deny-list, config-write symlink refusal, and CSRF/Origin/Host guards.
+# --------------------------------------------------------------------------- #
+
+def test_widening_view_ext_cannot_reach_pruned_dirs(sample_tree, monkeypatch):
+    """Widening VIEW_EXT (e.g. to .txt via config) must NOT expose files inside
+    pruned/hidden dirs (.git, node_modules). Tree-pruning is matched by the read
+    boundary so a config change cannot leak secrets the tree hides."""
+    monkeypatch.setattr(viewer, "VIEW_EXT",
+                        (".md", ".markdown", ".pdf", ".svg", ".txt"))
+    viewer._tree_cache["json"] = None
+    # The top-level .txt becomes reachable (intended) ...
+    assert viewer._safe_resolve("secret.txt") is not None
+    # ... but secrets behind pruned dirs stay unreachable.
+    assert viewer._safe_resolve(".git/credentials.txt") is None
+    assert viewer._safe_resolve("node_modules/pkg/npm.txt") is None
+    # And they never appear in the tree either.
+    blob = json.dumps(viewer._build_tree(sample_tree))
+    assert "credentials.txt" not in blob
+    assert "npm.txt" not in blob
+
+
+def test_pruned_dir_read_blocked_over_http(sample_tree, monkeypatch):
+    """End-to-end: even with .txt enabled, GET cannot fetch .git/node_modules
+    secrets (404), while the legit top-level .txt is served."""
+    monkeypatch.setattr(viewer, "VIEW_EXT",
+                        (".md", ".markdown", ".pdf", ".svg", ".txt"))
+    viewer._tree_cache["json"] = None
+    server, port = _serve(sample_tree)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        with urlopen(base + "/api/file?path=secret.txt") as r:
+            assert r.status == 200            # top-level .txt is now viewable
+        for hidden in (".git/credentials.txt", "node_modules/pkg/npm.txt"):
+            try:
+                urlopen(base + "/api/file?path=" + urllib.parse.quote(hidden))
+                assert False, f"expected 404 for {hidden}"
+            except urllib.error.HTTPError as e:
+                assert e.code == 404
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_open_refuses_executable_extensions(sample_tree, monkeypatch):
+    """Even with open enabled and the file under root, ShellExecute-able types
+    (.bat etc.) are refused so /api/open is not a code-execution primitive."""
+    monkeypatch.setattr(viewer, "ENABLE_OPEN", True)
+    launched = []
+    monkeypatch.setattr(viewer, "_os_open", lambda p: launched.append(p))
+    # Resolver level: executable extension is rejected.
+    assert viewer._safe_open_resolve("payload.bat") is None
+    assert ".bat" in viewer.EXECUTABLE_EXT
+    server, port = _serve(sample_tree)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        status, _ = _post(base + "/api/open?path=payload.bat")
+        assert status == 404
+        assert launched == []                 # never launched
+        # A safe, non-executable file still opens.
+        status, j = _post(base + "/api/open?path=secret.txt")
+        assert status == 200 and j["ok"] is True
+        assert len(launched) == 1
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_open_resolver_blocks_pruned_dirs(sample_tree):
+    """_safe_open_resolve also honours the pruned-dir boundary."""
+    assert viewer._safe_open_resolve(".git/credentials.txt") is None
+    assert viewer._safe_open_resolve("node_modules/pkg/npm.txt") is None
+
+
+def test_write_config_refuses_symlink(tmp_path, monkeypatch):
+    """If CONFIG_PATH is a symlink (e.g. pre-planted to point outside root), the
+    write is refused so the only write target cannot be redirected."""
+    victim = tmp_path / "victim_outside.json"
+    victim.write_text("ORIGINAL", encoding="utf-8")
+    link = tmp_path / ".mdtree.json"
+    try:
+        link.symlink_to(victim)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not supported in this environment")
+    monkeypatch.setattr(viewer, "CONFIG_PATH", link)
+    with pytest.raises(OSError):
+        viewer._write_config_file({"view_ext": [".md"]})
+    # The victim file was not overwritten.
+    assert victim.read_text(encoding="utf-8") == "ORIGINAL"
+
+
+def test_post_config_requires_csrf_token(sample_tree):
+    """POST /api/config without (or with a wrong) X-CSRF-Token is rejected 403
+    and does not write the config file."""
+    server, port = _serve(sample_tree)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        cfg_file = sample_tree / ".mdtree.json"
+        # No token.
+        status, j = _post(base + "/api/config", {"view_ext": [".md"]}, csrf=False)
+        assert status == 403 and j and j["ok"] is False
+        assert not cfg_file.exists()
+        # Wrong token.
+        status, _ = _post(base + "/api/config", {"view_ext": [".md"]},
+                          headers={"X-CSRF-Token": "wrong-token"}, csrf=False)
+        assert status == 403
+        assert not cfg_file.exists()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_post_open_requires_csrf_token(sample_tree, monkeypatch):
+    """POST /api/open without a valid token is rejected before ENABLE_OPEN is
+    even consulted, and never launches."""
+    monkeypatch.setattr(viewer, "ENABLE_OPEN", True)
+    launched = []
+    monkeypatch.setattr(viewer, "_os_open", lambda p: launched.append(p))
+    server, port = _serve(sample_tree)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        status, j = _post(base + "/api/open?path=README.md", csrf=False)
+        assert status == 403
+        assert launched == []
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_post_rejects_cross_origin(sample_tree):
+    """A cross-origin Origin header is rejected even if a token is supplied
+    (defence in depth; the token alone already stops simple-request CSRF)."""
+    server, port = _serve(sample_tree)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        status, j = _post(base + "/api/config", {"view_ext": [".md"]},
+                          headers={"Origin": "https://evil.example.com"})
+        assert status == 403 and j and "cross-origin" in (j.get("error") or "")
+        assert not (sample_tree / ".mdtree.json").exists()
+        # Same-origin Origin is accepted.
+        status, j = _post(base + "/api/config", {"view_ext": [".md"]},
+                          headers={"Origin": f"http://127.0.0.1:{port}"})
+        assert status == 200 and j["ok"] is True
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_post_rejects_bad_host_header(sample_tree):
+    """A non-loopback Host header (DNS-rebinding attempt) is rejected."""
+    server, port = _serve(sample_tree)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        status, j = _post(base + "/api/config", {"view_ext": [".md"]},
+                          headers={"Host": "attacker.example.com"})
+        assert status == 403 and j and "Host" in (j.get("error") or "")
+        assert not (sample_tree / ".mdtree.json").exists()
+    finally:
+        server.shutdown()
+        server.server_close()
