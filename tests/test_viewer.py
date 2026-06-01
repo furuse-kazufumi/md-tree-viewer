@@ -241,8 +241,9 @@ def test_config_post_invalid_json_400(sample_tree):
     server, port = _serve(sample_tree)
     try:
         base = f"http://127.0.0.1:{port}"
-        req = urllib.request.Request(base + "/api/config", data=b"not json{",
-                                     method="POST", headers={"Content-Type": "application/json"})
+        req = urllib.request.Request(
+            base + "/api/config", data=b"not json{", method="POST",
+            headers={"Content-Type": "application/json", "X-CSRF-Token": viewer.CSRF_TOKEN})
         try:
             urlopen(req)
             assert False, "expected 400"
