@@ -2063,11 +2063,12 @@ class Handler(BaseHTTPRequestHandler):
                 # and Content-Disposition: inline (display, don't auto-download).
                 # Unknown extensions fall back to a plain-text MIME (never
                 # text/html / never sniffable), so an unexpected type is inert.
+                # A scriptable-document kind (SVG) additionally gets a
+                # script-blocking CSP + sandbox so a direct top-level navigation
+                # to the raw URL cannot run embedded <script> in this origin.
                 ctype = _mime_for_ext(target.suffix)
-                self._send(200, target.read_bytes(), ctype, extra_headers={
-                    "X-Content-Type-Options": "nosniff",
-                    "Content-Disposition": "inline",
-                })
+                self._send(200, target.read_bytes(), ctype,
+                           extra_headers=_raw_headers_for_ext(target.suffix))
             else:
                 self._send(200, target.read_text(encoding="utf-8", errors="replace").encode("utf-8"),
                            "text/plain; charset=utf-8")
