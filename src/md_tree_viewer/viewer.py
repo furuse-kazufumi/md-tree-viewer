@@ -771,7 +771,10 @@ def _subtree_json(rel: str) -> str | None:
     norm = str(base.relative_to(ROOT.resolve())).replace("\\", "/")
     if norm == ".":
         norm = ""
-    node = _build_tree(ROOT, max_depth=1, base_rel=norm)
+    # max_depth=0 → only this directory's immediate contents: its files plus its
+    # sub-directories as lazy stubs (grandchildren are NOT inlined). The next
+    # expansion fetches the next level, so each click costs one directory.
+    node = _build_tree(ROOT, max_depth=0, base_rel=norm)
     return json.dumps(node, ensure_ascii=False)
 
 
