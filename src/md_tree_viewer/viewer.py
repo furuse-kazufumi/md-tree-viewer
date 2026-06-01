@@ -1085,8 +1085,11 @@ function makeChild(node, parentPath) {
   return makeDir(node, parentPath ? parentPath + '/' + node.name : node.name);
 }
 
-// Lazy render: a directory's children are created the first time it is opened.
-// Keeps the DOM small so collapse/expand reflow stays cheap.
+// Lazy render: a directory's children DOM is created the first time it is opened.
+// In v0.3 the server also sends the deep tree lazily — a node may arrive as a
+// "lazy" stub (lazy:true, empty children); the first time it is opened we fetch
+// /api/tree?path=<dir> and splice the returned children in. Keeps both the DOM
+// and the initial payload small, so startup is bounded by the shallow levels.
 function makeDir(node, dirPath) {
   const li = document.createElement('li');
   li.className = 'dir'; li.dataset.path = dirPath;
@@ -1104,20 +1107,34 @@ function makeDir(node, dirPath) {
   }
   li.appendChild(label);
   const ul = document.createElement('ul'); li.appendChild(ul);
-  let built = false;
-  function build() {
-    if (built) return;
+  let built = false, fetching = false;
+  function renderChildren() {
     const frag = document.createDocumentFragment();
     for (const c of node.children) frag.appendChild(makeChild(c, dirPath));
-    ul.appendChild(frag); built = true;
+    ul.appendChild(frag);
   }
-  function setOpen(open) {
-    if (open) { build(); li.classList.add('open'); li.classList.remove('collapsed'); openDirs.add(dirPath); }
+  async function build() {
+    if (built || fetching) return;
+    // A lazy stub has no children yet → fetch this directory's contents on demand.
+    if (node.lazy && (!node.children || node.children.length === 0)) {
+      fetching = true;
+      try {
+        const r = await fetch('/api/tree?path=' + encodeURIComponent(dirPath));
+        if (r.ok) { const sub = await r.json(); node.children = sub.children || []; node.lazy = false; }
+        else { node.children = []; node.lazy = false; }
+      } catch (e) { node.children = []; }
+      fetching = false;
+    }
+    if (built) return;
+    renderChildren(); built = true;
+  }
+  async function setOpen(open) {
+    if (open) { await build(); li.classList.add('open'); li.classList.remove('collapsed'); openDirs.add(dirPath); }
     else { li.classList.remove('open'); li.classList.add('collapsed'); openDirs.delete(dirPath); }
     saveSet(OPEN_KEY, openDirs);
   }
   label.onclick = () => setOpen(!li.classList.contains('open'));
-  if (openDirs.has(dirPath)) { build(); li.classList.add('open'); } else { li.classList.add('collapsed'); }
+  if (openDirs.has(dirPath)) { build().then(() => li.classList.add('open')); } else { li.classList.add('collapsed'); }
   return li;
 }
 
