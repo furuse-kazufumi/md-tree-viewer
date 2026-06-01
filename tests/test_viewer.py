@@ -275,21 +275,23 @@ def test_config_post_invalid_json_400(sample_tree):
 
 
 def test_view_ext_reflected_in_tree_and_resolve(sample_tree, monkeypatch):
-    """Adding .txt to VIEW_EXT makes secret.txt both listed and resolvable; the
-    default set keeps it hidden."""
-    # Default: secret.txt is not viewable.
-    assert viewer._safe_resolve("secret.txt") is None
-    assert "secret.txt" not in json.dumps(viewer._build_tree(sample_tree))
+    """Adding a non-registry extension (.dat) to VIEW_EXT makes secret.dat both
+    listed and resolvable; the default set keeps it hidden. Because .dat is not
+    in the content-type registry it is flagged non-renderable (OS-open only)."""
+    # Default: secret.dat is not viewable.
+    assert viewer._safe_resolve("secret.dat") is None
+    assert "secret.dat" not in json.dumps(viewer._build_tree(sample_tree))
     # Override the active VIEW_EXT (as config / --ext would).
-    monkeypatch.setattr(viewer, "VIEW_EXT", (".md", ".markdown", ".pdf", ".svg", ".txt"))
+    monkeypatch.setattr(viewer, "VIEW_EXT", viewer.DEFAULT_VIEW_EXT + (".dat",))
     viewer._tree_cache["json"] = None
-    assert viewer._safe_resolve("secret.txt") is not None
+    assert viewer._safe_resolve("secret.dat") is not None
     blob = json.dumps(viewer._build_tree(sample_tree))
-    assert "secret.txt" in blob
-    # The .txt entry is flagged non-renderable (it opens via OS association, not inline).
+    assert "secret.dat" in blob
+    # The .dat entry is flagged non-renderable (it opens via OS association, not inline).
     tree = viewer._build_tree(sample_tree)
-    txt = [n for n in _iter_files(tree) if n["name"] == "secret.txt"][0]
-    assert txt["renderable"] is False
+    dat = [n for n in _iter_files(tree) if n["name"] == "secret.dat"][0]
+    assert dat["renderable"] is False
+    assert dat["ext"] == "other"
 
 
 def _iter_files(node):
