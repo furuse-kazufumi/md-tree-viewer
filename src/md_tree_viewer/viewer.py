@@ -1432,7 +1432,7 @@ contentEl.addEventListener('click', (e) => {
   if (/^([a-z]+:|#|\/\/)/i.test(href)) return;
   e.preventDefault();
   const target = resolveRel(currentDocPath, decodeURIComponent(href.split('#')[0]));
-  const node = flatFiles.find(f => f.path === target);
+  const node = searchPool().find(f => f.path === target);
   if (node) { openFile(node, null); return; }
   const gh = ghUrlForPath(target);
   if (gh) { window.open(gh, '_blank', 'noopener'); return; }
