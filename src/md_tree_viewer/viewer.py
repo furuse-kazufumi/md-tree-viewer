@@ -16,13 +16,22 @@ Features:
   the only clue to its content).
 - Right pane: .md is rendered (GFM tables/code/Mermaid), .pdf is embedded, .svg
   is shown as an image.
-- Dependency dirs, virtualenvs and .git are skipped while scanning (fast, no noise).
-- Settings (viewable extensions, per-project icons, theme, enable-open) persist to
-  a single config file (``<root>/.mdtree.json`` or ``~/.md_tree_viewer.json``).
+- Dependency dirs, virtualenvs and .git are skipped while scanning (fast, no
+  noise); extra directory names can be skipped via config ``ignore: [...]``.
+- The tree loads lazily (v0.3): the startup payload is shallow (top ~2 levels) and
+  deeper directories are fetched on expansion via GET /api/tree?path=<dir>. A
+  persistent scan cache under ~/.md_tree_viewer/cache re-scans only directories
+  whose mtime changed, so startup cost is bounded by breadth, not total files.
+  Disable with --no-cache.
+- Settings (viewable extensions, per-project icons, theme, enable-open, ignore)
+  persist to a single config file (``<root>/.mdtree.json`` or
+  ``~/.md_tree_viewer.json``).
 - Mostly read-only. GET serves only viewable files under the root, outside pruned
-  dirs (.git/node_modules/…), with path traversal and symlink escape prevented.
-  The ONLY write endpoint, POST /api/config, writes that one config file (never a
-  symlink) and nothing else. POST /api/open launches a root-confined, non-pruned,
+  dirs (.git/node_modules/ignored/…), with path traversal and symlink escape
+  prevented. The only request that writes a file you can influence is POST
+  /api/config, which writes that one config file (never a symlink) and nothing
+  else. The scan cache writes only inside ~/.md_tree_viewer/cache (also refusing a
+  symlinked target). POST /api/open launches a root-confined, non-pruned,
   non-executable file with its OS association, and is disabled by default (opt-in
   via --enable-open / config). Both POSTs require a per-process CSRF token and a
   loopback Host/Origin (fail-closed), so a browser page cannot forge them.
