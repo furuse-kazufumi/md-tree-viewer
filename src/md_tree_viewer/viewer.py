@@ -1221,6 +1221,14 @@ class Handler(BaseHTTPRequestHandler):
         return data if isinstance(data, dict) else None
 
     # --- request-origin / CSRF guards for state-changing requests --------------
+    def _bound_port(self) -> int | None:
+        """The port this server is actually bound to (authoritative, taken from the
+        live socket). None if unavailable."""
+        try:
+            return int(self.server.server_address[1])
+        except (AttributeError, IndexError, TypeError, ValueError):
+            return None
+
     def _host_ok(self) -> bool:
         """Validate the Host header so a DNS-rebinding name that resolves to
         127.0.0.1 cannot reach the local server. Only loopback literals (with the
@@ -1228,14 +1236,19 @@ class Handler(BaseHTTPRequestHandler):
         host = (self.headers.get("Host") or "").strip()
         if not host:
             return False
-        # Strip a trailing :port and bracketed IPv6.
-        hostname, _, port = host.rpartition(":")
-        if not hostname:                       # no colon → rpartition put it all in `port`
+        # Split a trailing :port, tolerating bracketed IPv6 ("[::1]:8765").
+        if host.startswith("["):
+            hostname, _, port = host[1:].partition("]")
+            port = port.lstrip(":")
+        elif ":" in host:
+            hostname, _, port = host.rpartition(":")
+        else:
             hostname, port = host, ""
         hostname = hostname.strip("[]").lower()
-        if port and port not in ("", str(BOUND_PORT)):
+        bound = self._bound_port()
+        if port and bound is not None and port != str(bound):
             return False
-        if hostname in ("localhost",):
+        if hostname == "localhost":
             return True
         try:
             return ipaddress.ip_address(hostname).is_loopback
@@ -1247,6 +1260,7 @@ class Handler(BaseHTTPRequestHandler):
         rejected. A missing Origin/Referer is allowed because the CSRF-token
         header is the primary defence and same-origin fetches do not always set
         Origin; the token check still gates those."""
+        bound = self._bound_port()
         for header in ("Origin", "Referer"):
             val = (self.headers.get(header) or "").strip()
             if not val:
@@ -1258,7 +1272,7 @@ class Handler(BaseHTTPRequestHandler):
             if u.scheme not in ("http", "https"):
                 return False
             hostname = (u.hostname or "").lower()
-            if u.port not in (None, BOUND_PORT):
+            if bound is not None and u.port not in (None, bound):
                 return False
             if hostname == "localhost":
                 return True
