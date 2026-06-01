@@ -315,7 +315,7 @@ def config_payload() -> dict:
 
 def _skip_dir(name: str) -> bool:
     n = name.lower()
-    if n in NOISE_DIRS or n.startswith("."):
+    if n in NOISE_DIRS or n in IGNORE_DIRS or n.startswith("."):
         return True
     # virtualenvs / package metadata are matched by substring/suffix.
     if "venv" in n or n.endswith(".egg-info") or n.endswith(".dist-info"):
