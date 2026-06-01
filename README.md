@@ -16,6 +16,9 @@ directory tree. Point it at a folder full of docs and browse them by
   while scanning, so a tree with thousands of files stays responsive.
 - **Recently opened / Recently modified** quick sections, and folders that
   contain recently changed files are highlighted so you can find your active work.
+- **Configurable** — viewable extensions, per-project emoji icons, light/dark
+  theme and the OS-open toggle are editable in the settings panel and persist to
+  a single config file (see *Settings* below).
 - **No build, no dependencies** — Python standard library only. (Rendering loads
   `marked.js` and `mermaid.js` from a CDN, so Markdown styling needs a network
   connection; the tree, PDF and SVG work offline.)
