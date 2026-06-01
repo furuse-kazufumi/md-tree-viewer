@@ -131,11 +131,19 @@ def test_http_endpoints(sample_tree):
 # v0.2: config helpers, VIEW_EXT, /api/config, /api/open, project icons.
 # --------------------------------------------------------------------------- #
 
-def _post(url, payload=None):
-    """POST helper returning (status, json-or-None)."""
+def _post(url, payload=None, headers=None, csrf=True):
+    """POST helper returning (status, json-or-None).
+
+    By default it sends a valid X-CSRF-Token (the server's per-process token) so
+    happy-path tests pass the CSRF guard. Pass csrf=False (or override via
+    `headers`) to exercise the rejection paths."""
     data = None if payload is None else json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=data, method="POST",
-                                 headers={"Content-Type": "application/json"})
+    hdrs = {"Content-Type": "application/json"}
+    if csrf:
+        hdrs["X-CSRF-Token"] = viewer.CSRF_TOKEN
+    if headers:
+        hdrs.update(headers)
+    req = urllib.request.Request(url, data=data, method="POST", headers=hdrs)
     try:
         with urlopen(req) as r:
             body = r.read().decode("utf-8")
