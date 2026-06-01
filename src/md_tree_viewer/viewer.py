@@ -1631,7 +1631,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(500, {"ok": False, "error": f"could not write config: {e}"})
             return
         _apply_config(cfg)
-        _tree_cache["json"] = None   # view_ext / icons may have changed → rescan
+        _reset_tree_cache()   # view_ext / icons / ignore may have changed → rescan
         self._send_json(200, {"ok": True, "config": config_payload()})
 
     def _handle_post_open(self, p):
