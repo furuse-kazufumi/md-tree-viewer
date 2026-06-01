@@ -829,6 +829,28 @@ async function openFile(node, el) {
   if (location.hash.slice(1) !== encodeURI(node.path)) history.replaceState(null, '', '#' + encodeURI(node.path));
   if (activeEl) activeEl.classList.remove('active');
   if (el) { el.classList.add('active'); activeEl = el; }
+  // Non-renderable types (listed via config but not viewable inline): offer to
+  // launch with the OS association via POST /api/open (server-gated: 403 when off).
+  if (node.renderable === false) {
+    contentEl.innerHTML = pathHeader(node)
+      + '<div class="doc"><p>This file type is not rendered inline.</p>'
+      + '<p><button id="osopen">Open with the default app ↗</button> '
+      + '<span id="openmsg" class="when"></span></p>'
+      + '<p class="when">Opens the file on the machine running the server, using its '
+      + 'OS file association. Disabled unless the server was started with '
+      + '<code>--enable-open</code>.</p></div>';
+    const btn = document.getElementById('osopen'), msg = document.getElementById('openmsg');
+    btn.onclick = async () => {
+      msg.textContent = 'opening…';
+      try {
+        const r = await fetch('/api/open?path=' + encodeURIComponent(node.path), { method: 'POST' });
+        const j = await r.json().catch(() => ({}));
+        msg.textContent = r.ok ? 'launched.' : (j.error || ('failed (' + r.status + ')'));
+      } catch (e) { msg.textContent = 'request failed'; }
+    };
+    contentEl.scrollTop = 0;
+    return;
+  }
   if (node.ext === 'svg') {
     contentEl.innerHTML = pathHeader(node) + '<div class="doc"><img src="/api/raw?path=' + encodeURIComponent(node.path) + '" alt="' + node.name + '" style="max-width:100%"></div>';
     return;
