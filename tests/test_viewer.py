@@ -531,3 +531,248 @@ def test_post_rejects_bad_host_header(sample_tree):
     finally:
         server.shutdown()
         server.server_close()
+
+
+# --------------------------------------------------------------------------- #
+# v0.3 startup speed: lazy subtree endpoint, persistent scan cache (incremental
+# rescan), config `ignore`, and shallow startup walk.
+# --------------------------------------------------------------------------- #
+
+@pytest.fixture
+def deep_tree(sample_tree):
+    """Extend the sample tree with a deeper directory chain so lazy/shallow
+    behaviour is observable. Adds docs/sub/deep/deepfile.md (3 levels under root)
+    and a top-level skipme/ dir with a markdown file (for the `ignore` test)."""
+    deep = sample_tree / "docs" / "sub" / "deep"
+    deep.mkdir(parents=True)
+    (deep / "deepfile.md").write_text("# Deep\n\nA deeply nested document.\n", encoding="utf-8")
+    skip = sample_tree / "skipme"
+    skip.mkdir()
+    (skip / "noted.md").write_text("# In skipme\n\nShould be excluded when ignored.\n", encoding="utf-8")
+    return sample_tree
+
+
+def test_normalise_ignore_list_names_only():
+    """`ignore` accepts bare directory names; path-bearing / traversal tokens are
+    dropped so it can never become a path primitive."""
+    assert viewer._normalise_ignore_list("Build, Tmp") == ["build", "tmp"]
+    assert viewer._normalise_ignore_list(["A", "a", "b"]) == ["a", "b"]   # lower + dedup
+    # Anything with a separator or traversal is rejected outright.
+    assert viewer._normalise_ignore_list(["../etc", "a/b", "c\\d", "..", "."]) == []
+    assert viewer._normalise_ignore_list(None) == []
+
+
+def test_coerce_config_accepts_ignore():
+    cfg = viewer._coerce_config({"ignore": ["dist", "Build", "a/b"]})
+    assert cfg["ignore"] == ["dist", "build"]      # a/b dropped, lower-cased
+    # ignore is a sanctioned key.
+    assert "ignore" in viewer.CONFIG_KEYS
+
+
+def test_ignore_excludes_dir_from_tree(deep_tree, monkeypatch):
+    """A directory named in the active IGNORE_DIRS is skipped while scanning, just
+    like the built-in NOISE_DIRS."""
+    # Present by default.
+    blob = json.dumps(viewer._build_tree(deep_tree, use_cache=False))
+    assert "noted.md" in blob
+    # With skipme ignored, it disappears from the tree and is unresolvable.
+    monkeypatch.setattr(viewer, "IGNORE_DIRS", frozenset({"skipme"}))
+    viewer._reset_tree_cache()
+    assert viewer._skip_dir("skipme")
+    blob = json.dumps(viewer._build_tree(deep_tree, use_cache=False))
+    assert "noted.md" not in blob
+    assert viewer._safe_resolve("skipme/noted.md") is None
+    # The lazy directory resolver also refuses an ignored dir.
+    assert viewer._safe_resolve_dir("skipme") is None
+
+
+def test_ignore_round_trips_through_config_post(sample_tree):
+    """POST /api/config persists `ignore`, and GET reflects it."""
+    server, port = _serve(sample_tree)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        status, j = _post(base + "/api/config", {"ignore": ["Build", "tmp", "bad/x"]})
+        assert status == 200 and j["ok"] is True
+        assert sorted(j["config"]["ignore"]) == ["build", "tmp"]   # path token dropped
+        on_disk = json.loads((sample_tree / ".mdtree.json").read_text(encoding="utf-8"))
+        assert on_disk["ignore"] == ["build", "tmp"]
+        with urlopen(base + "/api/config") as r:
+            cfg = json.loads(r.read())
+        assert sorted(cfg["ignore"]) == ["build", "tmp"]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_shallow_build_emits_lazy_stub_for_deep_dirs(deep_tree):
+    """With max_depth=SHALLOW_DEPTH, directories deeper than the limit arrive as
+    lazy stubs (empty children, lazy=True), so startup does not walk everything."""
+    shallow = viewer._build_tree(deep_tree, max_depth=viewer.SHALLOW_DEPTH, use_cache=False)
+    # Find docs/sub in the shallow tree.
+    docs = [c for c in shallow["children"] if c.get("name") == "docs"][0]
+    sub = [c for c in docs["children"] if c.get("name") == "sub"][0]
+    # At depth == SHALLOW_DEPTH (2), `sub` is truncated → lazy stub, no children.
+    assert sub.get("lazy") is True
+    assert sub["children"] == []
+    # The deep file is NOT present in the shallow payload.
+    assert "deepfile.md" not in json.dumps(shallow)
+    # But the FULL build does contain it (depth unlimited).
+    full = viewer._build_tree(deep_tree, use_cache=False)
+    assert "deepfile.md" in json.dumps(full)
+
+
+def test_shallow_build_does_not_walk_deeper_than_limit(deep_tree, monkeypatch):
+    """The shallow walk must not _extract_meta deep files (proof the deep dir is
+    not scanned for content during a shallow build)."""
+    seen = []
+    real = viewer._extract_meta
+    monkeypatch.setattr(viewer, "_extract_meta", lambda p: (seen.append(str(p)), real(p))[1])
+    # max_depth=1: only root + its immediate children are scanned for content.
+    viewer._build_tree(deep_tree, max_depth=1, use_cache=False)
+    assert not any("deepfile.md" in s for s in seen)
+    assert not any("guide.md" in s for s in seen)   # docs/* is below depth 1
+
+
+def test_lazy_subtree_endpoint_returns_children(deep_tree):
+    """GET /api/tree?path=<dir> returns that directory's immediate children."""
+    server, port = _serve(deep_tree)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        with urlopen(base + "/api/tree?path=" + urllib.parse.quote("docs/sub")) as r:
+            sub = json.loads(r.read())
+        assert sub["type"] == "dir"
+        names = {c["name"] for c in sub["children"]}
+        assert "deep" in names              # the deep dir appears (as a stub)
+        # Its grandchild file is NOT inlined here (one level only).
+        deep = [c for c in sub["children"] if c["name"] == "deep"][0]
+        assert deep.get("lazy") is True and deep["children"] == []
+        # Fetching the deep dir itself yields its file.
+        with urlopen(base + "/api/tree?path=" + urllib.parse.quote("docs/sub/deep")) as r:
+            d = json.loads(r.read())
+        assert "deepfile.md" in json.dumps(d)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_lazy_subtree_rejects_outside_root_and_pruned(deep_tree, monkeypatch):
+    """The lazy endpoint 404s for paths outside the root or inside pruned/hidden
+    or ignored directories — the same boundary as the read endpoints."""
+    monkeypatch.setattr(viewer, "IGNORE_DIRS", frozenset({"skipme"}))
+    viewer._reset_tree_cache()
+    server, port = _serve(deep_tree)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        for bad in ("../..", "node_modules", "node_modules/pkg", ".git", "skipme", "does/not/exist"):
+            try:
+                urlopen(base + "/api/tree?path=" + urllib.parse.quote(bad))
+                assert False, f"expected 404 for {bad}"
+            except urllib.error.HTTPError as e:
+                assert e.code == 404
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_safe_resolve_dir_confinement(deep_tree):
+    """_safe_resolve_dir confines to root, requires a real dir, and rejects pruned
+    components (including the leaf dir's own name)."""
+    assert viewer._safe_resolve_dir("docs") is not None
+    assert viewer._safe_resolve_dir("") is not None              # root itself
+    assert viewer._safe_resolve_dir("README.md") is None         # a file, not a dir
+    assert viewer._safe_resolve_dir("../..") is None             # traversal
+    assert viewer._safe_resolve_dir(".git") is None              # hidden/pruned leaf
+    assert viewer._safe_resolve_dir("node_modules/pkg") is None  # pruned component
+
+
+def test_cache_round_trip_writes_and_reuses(deep_tree, monkeypatch):
+    """A cached build writes a cache file; a second build reuses unchanged dirs
+    (verified by counting how many directories are freshly scanned)."""
+    cpath = viewer._cache_path(deep_tree)
+    assert cpath is not None
+    # First build (cold) → cache file created, every dir scanned.
+    scanned = []
+    real_scan = viewer._scan_one_dir
+    monkeypatch.setattr(viewer, "_scan_one_dir",
+                        lambda root, rel: (scanned.append(rel), real_scan(root, rel))[1])
+    t1 = viewer._build_tree(deep_tree, use_cache=True)
+    assert cpath.is_file()
+    cold_scans = list(scanned)
+    assert cold_scans, "cold build should scan directories"
+    # Second build (warm) → no directory mtimes changed, so nothing is re-scanned.
+    scanned.clear()
+    t2 = viewer._build_tree(deep_tree, use_cache=True)
+    assert scanned == [], "warm build must reuse the cache (no rescans)"
+    # Same content both times.
+    assert json.dumps(t1, sort_keys=True) == json.dumps(t2, sort_keys=True)
+
+
+def test_cache_incremental_rescan_on_dir_mtime_change(deep_tree, monkeypatch):
+    """Adding a file to ONE directory changes only that directory's mtime, so the
+    incremental rescan touches that dir (and its now-stale ancestors via stat) but
+    not the unrelated, unchanged directories."""
+    import os as _os
+    import time as _time
+    # Warm the cache.
+    viewer._build_tree(deep_tree, use_cache=True)
+    # Mutate one directory: add a new md to docs/sub/deep and bump its mtime.
+    deep = deep_tree / "docs" / "sub" / "deep"
+    (deep / "added.md").write_text("# Added\n\nNew deep file.\n", encoding="utf-8")
+    future = _time.time() + 10
+    _os.utime(deep, (future, future))
+    # Track which dirs get freshly scanned on the next build.
+    scanned = []
+    real_scan = viewer._scan_one_dir
+    monkeypatch.setattr(viewer, "_scan_one_dir",
+                        lambda root, rel: (scanned.append(rel), real_scan(root, rel))[1])
+    tree = viewer._build_tree(deep_tree, use_cache=True)
+    # The changed dir is re-scanned; an unrelated unchanged dir is NOT.
+    assert "docs/sub/deep" in scanned
+    assert "docs" not in scanned          # docs' own mtime did not change
+    # The new file is now present in the rebuilt tree.
+    assert "added.md" in json.dumps(tree)
+
+
+def test_no_cache_does_not_write_cache_file(deep_tree):
+    """use_cache=False must not create any cache file."""
+    cpath = viewer._cache_path(deep_tree)
+    assert cpath is not None and not cpath.exists()
+    viewer._build_tree(deep_tree, use_cache=False)
+    assert not cpath.exists()
+
+
+def test_cache_signature_changes_with_view_ext(deep_tree, monkeypatch):
+    """The cache file name embeds the scan signature (view_ext + ignore) so a
+    config change does not serve a tree built under a different config."""
+    p_default = viewer._cache_path(deep_tree)
+    monkeypatch.setattr(viewer, "VIEW_EXT", (".md", ".markdown", ".pdf", ".svg", ".txt"))
+    p_widened = viewer._cache_path(deep_tree)
+    assert p_default != p_widened
+    monkeypatch.setattr(viewer, "VIEW_EXT", viewer.DEFAULT_VIEW_EXT)
+    monkeypatch.setattr(viewer, "IGNORE_DIRS", frozenset({"foo"}))
+    assert viewer._cache_path(deep_tree) != p_default
+
+
+def test_tree_json_shallow_vs_full(deep_tree):
+    """_tree_json() defaults to the shallow tree (deep file absent); full=True
+    returns the complete tree (deep file present)."""
+    viewer._reset_tree_cache()
+    shallow = viewer._tree_json(force=True, full=False)
+    assert "deepfile.md" not in shallow
+    full = viewer._tree_json(force=True, full=True)
+    assert "deepfile.md" in full
+
+
+def test_api_tree_full_param_over_http(deep_tree):
+    """GET /api/tree?full=1 returns the complete tree over HTTP; the plain
+    endpoint stays shallow."""
+    server, port = _serve(deep_tree)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        with urlopen(base + "/api/tree") as r:
+            assert b"deepfile.md" not in r.read()
+        with urlopen(base + "/api/tree?full=1") as r:
+            assert b"deepfile.md" in r.read()
+    finally:
+        server.shutdown()
+        server.server_close()
