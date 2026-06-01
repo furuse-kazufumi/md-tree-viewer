@@ -404,6 +404,15 @@ def _build_tree(root: Path) -> dict:
 
     sort_node(root_node)
     root_node["gh_repos"] = _gh_repos_map(root)   # repo name -> GitHub blob base URL
+    # Per-project icon map (config.project_icons over baked-in REPO_ICON) for every
+    # top-level dir, so the client can show emoji icons with a colour-dot fallback.
+    icons: dict[str, str] = {}
+    for child in root_node["children"]:
+        if child.get("type") == "dir":
+            ic = project_icon(child["name"])
+            if ic:
+                icons[child["name"]] = ic
+    root_node["project_icons"] = icons
     return root_node
 
 
