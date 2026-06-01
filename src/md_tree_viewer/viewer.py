@@ -200,9 +200,22 @@ def _read_config_file() -> dict:
 
 def _write_config_file(cfg: dict) -> None:
     """Write the sanitised config to CONFIG_PATH (the single permitted write
-    target). Raises OSError on failure; callers map that to a 500."""
+    target). Raises OSError on failure; callers map that to a 500.
+
+    Symlink hardening: the read side (`_safe_resolve`) resolves symlinks and
+    re-checks containment, so the write side does the same here. If CONFIG_PATH
+    is (or resolves through) a symlink, the write is refused — otherwise a
+    symlink pre-planted at `<root>/.mdtree.json` pointing outside the root could
+    redirect the only write target to an arbitrary victim file. Refusing keeps
+    the write confined to a real regular file at the fixed config path."""
     if CONFIG_PATH is None:
         raise OSError("config path not initialised")
+    if CONFIG_PATH.is_symlink():
+        raise OSError("config path is a symlink; refusing to write")
+    # If the file already exists it must be a plain regular file (not a symlink,
+    # FIFO, device, etc.); a fresh write to a non-existent path is fine.
+    if CONFIG_PATH.exists() and not CONFIG_PATH.is_file():
+        raise OSError("config path is not a regular file; refusing to write")
     CONFIG_PATH.write_text(
         json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
