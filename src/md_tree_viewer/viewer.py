@@ -452,6 +452,9 @@ def _tree_json(force: bool = False) -> str:
 
 
 def _safe_resolve(rel: str) -> Path | None:
+    """Resolve a request path to an existing file under ROOT whose extension is in
+    the active VIEW_EXT. Returns None on traversal, missing file or bad extension.
+    Used by the read endpoints (/api/file, /api/raw)."""
     try:
         target = (ROOT / rel).resolve()
         target.relative_to(ROOT.resolve())
@@ -460,6 +463,34 @@ def _safe_resolve(rel: str) -> Path | None:
     if not target.is_file() or target.suffix.lower() not in VIEW_EXT:
         return None
     return target
+
+
+def _safe_open_resolve(rel: str) -> Path | None:
+    """Resolve a request path for OS-association launch: confined to ROOT and must
+    be an existing regular file, but NOT limited to VIEW_EXT (the point is to open
+    non-viewable types). No extension filter widens the attack surface beyond
+    'any existing file under root'; combined with ENABLE_OPEN being opt-in and the
+    launcher passing a single path argument (never a shell string), this avoids an
+    arbitrary-command-execution surface."""
+    try:
+        target = (ROOT / rel).resolve()
+        target.relative_to(ROOT.resolve())
+    except (ValueError, OSError):
+        return None
+    if not target.is_file():
+        return None
+    return target
+
+
+def _os_open(target: Path) -> None:
+    """Launch a file with its OS association. Caller must have already validated
+    the path with _safe_open_resolve and checked ENABLE_OPEN."""
+    if sys.platform.startswith("win"):
+        os.startfile(str(target))  # type: ignore[attr-defined]  # noqa: S606 — path is root-confined
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", str(target)])
+    else:
+        subprocess.Popen(["xdg-open", str(target)])
 
 
 INDEX_HTML = r"""<!DOCTYPE html>
