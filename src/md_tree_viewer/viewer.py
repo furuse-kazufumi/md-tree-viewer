@@ -573,9 +573,48 @@ INDEX_HTML = r"""<!DOCTYPE html>
 </style></head>
 <body><div id="wrap">
   <div id="side">
-    <h1>📁 __ROOT__ <span id="refresh" title="Rescan (pick up new files)" style="float:right;cursor:pointer">🔄</span></h1>
+    <h1>📁 __ROOT__
+      <span id="settingsBtn" title="Settings" style="float:right;cursor:pointer;margin-left:8px">⚙️</span>
+      <span id="refresh" title="Rescan (pick up new files)" style="float:right;cursor:pointer">🔄</span>
+    </h1>
     <input id="filter" placeholder="Filter by name or description...">
     <div id="count"></div>
+    <div id="settings" class="hidden">
+      <div class="setgrp">
+        <div class="settitle">Viewable extensions</div>
+        <div id="extList"></div>
+        <div class="setrow">
+          <input id="extAdd" placeholder=".rst" style="width:80px">
+          <button id="extAddBtn">Add</button>
+        </div>
+        <div class="setnote">md / markdown / pdf / svg render inline; other listed types open with the OS app.</div>
+      </div>
+      <div class="setgrp">
+        <div class="settitle">Project icons</div>
+        <div id="iconList"></div>
+        <div class="setrow">
+          <input id="iconName" placeholder="project dir" style="width:110px">
+          <input id="iconEmoji" placeholder="🧠" style="width:46px">
+          <button id="iconAddBtn">Add</button>
+        </div>
+      </div>
+      <div class="setgrp">
+        <div class="setrow"><label><input type="checkbox" id="enableOpen"> Allow OS-association open</label></div>
+        <div class="setnote" id="openNote">When off, the server returns 403 for open requests. Server may still force this off.</div>
+      </div>
+      <div class="setgrp">
+        <div class="setrow">
+          <label>Theme
+            <select id="themeSel"><option value="light">light</option><option value="dark">dark</option></select>
+          </label>
+        </div>
+      </div>
+      <div class="setrow">
+        <button id="saveCfg">Save</button>
+        <span id="cfgMsg" class="when"></span>
+      </div>
+      <div class="setnote" id="cfgPath"></div>
+    </div>
     <div id="tree">Loading...</div>
   </div>
   <div id="drag"></div>
