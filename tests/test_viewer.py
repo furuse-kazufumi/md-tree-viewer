@@ -31,8 +31,16 @@ def sample_tree(tmp_path, monkeypatch):
     noise = tmp_path / "node_modules" / "pkg"
     noise.mkdir(parents=True)
     (noise / "ignored.md").write_text("# Should be skipped\n", encoding="utf-8")
-    # A non-viewable file that must never appear.
+    # Secrets hidden inside pruned dirs (.git / node_modules) — they must stay
+    # unreachable even if VIEW_EXT is widened to their extension via config.
+    gitdir = tmp_path / ".git"
+    gitdir.mkdir()
+    (gitdir / "credentials.txt").write_text("https://user:token@github.com", encoding="utf-8")
+    (noise / "npm.txt").write_text("NPM_TOKEN=abc123", encoding="utf-8")
+    # A non-viewable file that must never appear (top-level, not in a pruned dir).
     (tmp_path / "secret.txt").write_text("top secret", encoding="utf-8")
+    # A would-be executable that OS-association open must refuse to launch.
+    (tmp_path / "payload.bat").write_text("echo pwned", encoding="utf-8")
 
     monkeypatch.setattr(viewer, "ROOT", tmp_path)
     monkeypatch.setattr(viewer, "_GH_REPOS", None)
