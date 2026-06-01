@@ -835,3 +835,175 @@ def test_api_tree_full_param_over_http(deep_tree):
     finally:
         server.shutdown()
         server.server_close()
+
+
+# --------------------------------------------------------------------------- #
+# v0.4 content-type registry: safe inline rendering of images / video / audio /
+# text+code, with correct Content-Type + nosniff + inline on /api/raw, and the
+# client-side HTML escape that keeps a <script> inside a .txt/.json inert.
+# --------------------------------------------------------------------------- #
+
+@pytest.fixture
+def media_tree(sample_tree):
+    """Add one file of each safe content kind to the sample tree, plus a text
+    file carrying a <script> payload to prove the escape path, and a
+    non-registry .dat the registry must treat as non-viewable."""
+    (sample_tree / "pic.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+    (sample_tree / "clip.mp4").write_bytes(b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 8)
+    (sample_tree / "tune.mp3").write_bytes(b"ID3" + b"\x00" * 16)
+    (sample_tree / "data.json").write_text('{"k": "<value>"}', encoding="utf-8")
+    # A text file whose CONTENT is a <script> — must be served as text and the
+    # client must escape it, so it can never execute.
+    (sample_tree / "evil.txt").write_text(
+        "<script>window.__pwned=1;</script>", encoding="utf-8")
+    (sample_tree / "code.py").write_text("print('hi <b>')\n", encoding="utf-8")
+    return sample_tree
+
+
+def test_registry_kind_and_mime_lookup():
+    """The registry resolves kinds and exact MIME types; unknown extensions fall
+    back to 'other' (kind) and an inert text/plain (mime), never text/html."""
+    assert viewer._kind_for_ext(".png") == "image"
+    assert viewer._kind_for_ext(".MP4") == "video"          # case-insensitive
+    assert viewer._kind_for_ext(".mp3") == "audio"
+    assert viewer._kind_for_ext(".py") == "text"
+    assert viewer._kind_for_ext(".json") == "text"
+    assert viewer._kind_for_ext(".md") == "md"
+    assert viewer._kind_for_ext(".pdf") == "pdf"
+    assert viewer._kind_for_ext(".svg") == "svg"
+    assert viewer._kind_for_ext(".zzz") == "other"
+    assert viewer._mime_for_ext(".png") == "image/png"
+    assert viewer._mime_for_ext(".jpg") == "image/jpeg"
+    assert viewer._mime_for_ext(".mp4") == "video/mp4"
+    assert viewer._mime_for_ext(".mp3") == "audio/mpeg"
+    # Every text/code type and every unknown type is served inertly (text/plain),
+    # never text/html (so a sniff bypass still cannot make the browser parse markup).
+    assert "text/html" not in viewer._mime_for_ext(".json")
+    assert "text/html" not in viewer._mime_for_ext(".zzz")
+    assert viewer._mime_for_ext(".zzz").startswith("text/plain")
+
+
+def test_default_view_ext_includes_safe_types_and_renderable_matches():
+    """v0.4 defaults expand to the safe content types; RENDERABLE_EXT is derived
+    from the registry so a viewable type is exactly an inline-renderable one. SVG
+    and HTML are NOT widened to HTML rendering here (SVG stays on the <img> path,
+    HTML is absent from the registry entirely)."""
+    for ext in (".png", ".jpg", ".gif", ".mp4", ".mp3", ".wav", ".txt", ".json",
+                ".py", ".js", ".csv", ".yaml", ".md", ".pdf", ".svg"):
+        assert ext in viewer.DEFAULT_VIEW_EXT, ext
+    # renderable set = registry entries with an inline kind.
+    for ext in (".png", ".mp4", ".mp3", ".txt", ".py", ".md", ".pdf", ".svg"):
+        assert ext in viewer.RENDERABLE_EXT, ext
+    # HTML is deliberately not in the registry (deferred to a later sandbox increment).
+    assert ".html" not in viewer.DEFAULT_VIEW_EXT
+    assert ".html" not in viewer.CONTENT_TYPES
+
+
+def test_file_entry_kinds_for_media_types(media_tree):
+    """Each media/text file is listed with its registry kind and renderable=True."""
+    tree = viewer._build_tree(media_tree, use_cache=False)
+    by_name = {n["name"]: n for n in _iter_files(tree)}
+    assert by_name["pic.png"]["ext"] == "image" and by_name["pic.png"]["renderable"]
+    assert by_name["clip.mp4"]["ext"] == "video" and by_name["clip.mp4"]["renderable"]
+    assert by_name["tune.mp3"]["ext"] == "audio" and by_name["tune.mp3"]["renderable"]
+    assert by_name["data.json"]["ext"] == "text" and by_name["data.json"]["renderable"]
+    assert by_name["code.py"]["ext"] == "text" and by_name["code.py"]["renderable"]
+
+
+def test_raw_content_type_nosniff_inline_per_type(media_tree):
+    """/api/raw serves each type with the registry Content-Type plus
+    X-Content-Type-Options: nosniff and Content-Disposition: inline."""
+    server, port = _serve(media_tree)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        cases = {
+            "pic.png": "image/png",
+            "clip.mp4": "video/mp4",
+            "tune.mp3": "audio/mpeg",
+            "data.json": "text/plain; charset=utf-8",
+            "code.py": "text/plain; charset=utf-8",
+            "docs/diagram.svg": "image/svg+xml",
+        }
+        for path, ctype in cases.items():
+            with urlopen(base + "/api/raw?path=" + urllib.parse.quote(path)) as r:
+                assert r.headers["Content-Type"] == ctype, path
+                assert r.headers["X-Content-Type-Options"] == "nosniff", path
+                assert r.headers["Content-Disposition"] == "inline", path
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_text_served_as_plain_not_html_so_script_is_inert(media_tree):
+    """A .txt/.json containing <script> is served as text/plain (never text/html)
+    with nosniff, so the browser cannot parse it as markup. The body is returned
+    verbatim (the client HTML-escapes it into <pre>); the defence is that the MIME
+    keeps it from ever being treated as executable HTML."""
+    server, port = _serve(media_tree)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        with urlopen(base + "/api/raw?path=evil.txt") as r:
+            assert r.headers["Content-Type"].startswith("text/plain")
+            assert "text/html" not in r.headers["Content-Type"]
+            assert r.headers["X-Content-Type-Options"] == "nosniff"
+            body = r.read().decode("utf-8")
+        # Raw body is the literal text (server does NOT inject it into HTML).
+        assert body == "<script>window.__pwned=1;</script>"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_index_page_escapes_text_and_injects_kind_map(media_tree):
+    """The served page carries the client-side HTML-escape helper and the
+    registry kind map (so a deep-linked media file gets the right renderer), and
+    leaves no unsubstituted placeholder."""
+    server, port = _serve(media_tree)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        with urlopen(base + "/") as r:
+            html = r.read().decode("utf-8")
+        assert "__CONTENT_KINDS__" not in html        # placeholder substituted
+        assert "function escapeHTML" in html          # client escape helper present
+        assert "CONTENT_KINDS" in html                # kind map injected
+        # The injected map maps a media extension to its kind.
+        assert '".png":"image"' in html or '".png": "image"' in html
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_media_types_blocked_in_pruned_and_outside_root(media_tree, monkeypatch):
+    """The pruned-dir / traversal boundary applies uniformly to the new types:
+    a .png/.txt inside .git or node_modules, or via traversal, is never served."""
+    # Plant media-typed secrets inside pruned dirs.
+    (media_tree / ".git" / "leak.png").write_bytes(b"\x89PNG\r\n")
+    (media_tree / "node_modules" / "pkg" / "leak.json").write_text("{}", encoding="utf-8")
+    server, port = _serve(media_tree)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        for bad in (".git/leak.png", "node_modules/pkg/leak.json", "../../etc/passwd.png"):
+            try:
+                urlopen(base + "/api/raw?path=" + urllib.parse.quote(bad))
+                assert False, f"expected 404 for {bad}"
+            except urllib.error.HTTPError as e:
+                assert e.code == 404
+        # A legit top-level media file IS served.
+        with urlopen(base + "/api/raw?path=pic.png") as r:
+            assert r.status == 200
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_html_extension_not_rendered_inline(media_tree, monkeypatch):
+    """HTML is deferred (not in the registry): even if a .html file is added to
+    VIEW_EXT via config, it is flagged non-renderable (kind 'other'), so it can
+    never be injected into the page in this increment."""
+    (media_tree / "page.html").write_text("<script>alert(1)</script>", encoding="utf-8")
+    monkeypatch.setattr(viewer, "VIEW_EXT", viewer.DEFAULT_VIEW_EXT + (".html",))
+    viewer._reset_tree_cache()
+    tree = viewer._build_tree(media_tree, use_cache=False)
+    page = [n for n in _iter_files(tree) if n["name"] == "page.html"][0]
+    assert page["ext"] == "other"
+    assert page["renderable"] is False
