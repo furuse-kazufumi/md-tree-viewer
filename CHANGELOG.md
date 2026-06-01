@@ -4,6 +4,41 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.1] - 2026-06-01
+
+### Security
+Hardening of the two write paths added in 0.2.0, found by an internal security
+review. None is remotely reachable (the server binds to `127.0.0.1`), but the
+fixes close browser-driven CSRF and read-scope-widening chains:
+
+- **CSRF / origin protection on every POST.** `POST /api/config` and
+  `POST /api/open` now require a per-process `X-CSRF-Token` header that matches a
+  random token embedded in the served page. A custom header forces a CORS
+  pre-flight, so a malicious web page can no longer forge a state-changing
+  "simple request" against the loopback server. The `Origin`/`Referer` (when
+  present) must be same-origin loopback, and the `Host` header must be a loopback
+  literal (DNS-rebinding mitigation). All checks fail closed (403).
+- **Read scope no longer escapes pruned/hidden directories.** `GET /api/file` /
+  `/api/raw` (and `POST /api/open`) now refuse any path inside a pruned dir
+  (`.git`, `node_modules`, dotdirs, virtualenvs, …). Previously, widening
+  `view_ext` via config could expose secrets the tree hides (e.g.
+  `.git/credentials`, `node_modules/**` tokens). Tree-pruning and the read
+  boundary now match.
+- **`POST /api/open` refuses executable file types.** A server-side deny-list
+  (`.exe`, `.bat`, `.cmd`, `.ps1`, `.vbs`, `.js`, `.hta`, `.lnk`, `.msi`, …)
+  blocks types that the OS association would *execute* rather than open, so the
+  feature cannot become a one-click code-execution primitive for a malicious file
+  that happens to sit under the root.
+- **Config write refuses a symlinked target.** `POST /api/config` will not write
+  if `<root>/.mdtree.json` is (or resolves through) a symlink or non-regular
+  file, matching the symlink resolution already done on the read side.
+
+### Changed
+- README and SPEC `§8` security sections updated to describe the CSRF/origin
+  guards, the pruned-dir read boundary, the executable-open deny-list, and the
+  honest caveat that widening `view_ext` exposes that extension's files under the
+  root (so a secret-bearing root should not be served).
+
 ## [0.2.0] - 2026-06-01
 
 ### Added
