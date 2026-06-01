@@ -110,6 +110,18 @@ REPO_ICON: dict[str, str] = {}
 # Default OFF for the OSS package; enabled only via --enable-open or config.
 ENABLE_OPEN = False
 
+# The port the server is actually bound to (set in main()); used to validate the
+# Host / Origin / Referer headers of state-changing POSTs. 0 means "not bound yet".
+BOUND_PORT = 0
+
+# A per-process random token, regenerated on every start, embedded in the served
+# HTML and required as the X-CSRF-Token header on every POST. Because a custom
+# header is not a CORS "simple request", a cross-origin page cannot set it without
+# a pre-flight (which same-origin policy will block), so this defeats the classic
+# form/fetch CSRF against the loopback server. Same-origin requests (the viewer's
+# own UI) read the token from the page and send it back.
+CSRF_TOKEN = secrets.token_urlsafe(32)
+
 # Active config (in memory). Mirrors the on-disk config file 1:1.
 CONFIG: dict = {}
 # Resolved path of the single config file this process reads/writes (set by
