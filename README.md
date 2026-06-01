@@ -44,6 +44,7 @@ mdtree --port 9000           # use a different port (default 8765)
 mdtree --no-browser          # do not open a browser automatically
 mdtree --ext ".md,.rst"      # override the viewable extensions for this run
 mdtree --enable-open         # allow OS-association launch of non-viewable files
+mdtree --no-cache            # disable the persistent scan cache (always walk fresh)
 ```
 
 You can also run it as a module:
