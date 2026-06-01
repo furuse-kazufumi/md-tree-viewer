@@ -8,10 +8,14 @@ directory tree. Point it at a folder full of docs and browse them by
   (`.md` / `.markdown` / `.pdf` / `.svg` by default), with a live search filter
   and a **settings panel** (⚙️). Each Markdown file shows its title and a
   one-line description so you can tell files apart at a glance.
-- **Right pane** — the selected file rendered:
+- **Right pane** — the selected file rendered. Every *safe* content type a
+  browser can display **without running embedded script** is rendered inline:
   - Markdown with GitHub-flavored tables, code, **Mermaid** diagrams, and CJK text
   - PDF embedded in the page
-  - SVG shown as an image
+  - SVG and images (`.png` `.jpg` `.gif` `.webp` `.avif` `.bmp` `.ico`) shown as images
+  - Video (`.mp4` `.webm` `.ogv`) and audio (`.mp3` `.wav` `.ogg` `.m4a` `.flac`) with controls
+  - Text / code (`.txt` `.json` `.csv` `.yaml` `.toml` `.py` `.js` `.ts` `.c` `.rs` `.go` …)
+    in a **HTML-escaped** code block, so a `<script>` inside a file is shown as text, never run
 - **Fast startup, even on huge trees** — the tree loads **lazily** (only the top
   couple of levels up front; deeper folders are fetched when you expand them) and
   a **persistent scan cache** re-scans only the directories that changed since
