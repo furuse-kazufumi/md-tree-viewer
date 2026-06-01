@@ -201,7 +201,11 @@ endpoints:
   dotdirs, virtualenvs, …) are **never** served, even if you widen `view_ext` to
   their extension — the read boundary matches what the tree hides, so a config
   change cannot leak secrets such as `.git/credentials` or `node_modules/**`
-  tokens.
+  tokens. `/api/raw` sets the registry's exact `Content-Type` plus
+  `X-Content-Type-Options: nosniff` and `Content-Disposition: inline`; text/code
+  and unknown types are served as `text/plain` (never `text/html`), and the
+  text/code viewer HTML-escapes the body, so a served file cannot execute script
+  in the viewer's origin.
 - **The only write endpoint is `POST /api/config`,** and it writes **exactly one
   file** — the config file described above — and nothing else. The request body
   is sanitised to a fixed set of known keys (`view_ext`, `project_icons`,
