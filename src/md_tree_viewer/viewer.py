@@ -1959,16 +1959,17 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(404, b"not found or not allowed", "text/plain; charset=utf-8")
                 return
             if p.path == "/api/raw":
-                suf = target.suffix.lower()
-                if suf == ".pdf":
-                    ctype = "application/pdf"
-                elif suf == ".svg":
-                    ctype = "image/svg+xml"
-                elif suf in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
-                    ctype = "image/" + ("jpeg" if suf in (".jpg", ".jpeg") else suf.lstrip("."))
-                else:
-                    ctype = "text/plain; charset=utf-8"
-                self._send(200, target.read_bytes(), ctype)
+                # v0.4: the content-type registry supplies the exact Content-Type.
+                # Always pair it with X-Content-Type-Options: nosniff (so the
+                # browser cannot MIME-sniff a text body into something executable)
+                # and Content-Disposition: inline (display, don't auto-download).
+                # Unknown extensions fall back to a plain-text MIME (never
+                # text/html / never sniffable), so an unexpected type is inert.
+                ctype = _mime_for_ext(target.suffix)
+                self._send(200, target.read_bytes(), ctype, extra_headers={
+                    "X-Content-Type-Options": "nosniff",
+                    "Content-Disposition": "inline",
+                })
             else:
                 self._send(200, target.read_text(encoding="utf-8", errors="replace").encode("utf-8"),
                            "text/plain; charset=utf-8")
