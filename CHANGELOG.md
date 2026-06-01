@@ -4,6 +4,45 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-06-01
+
+### Added — startup speed
+
+For roots with many files, the previous full tree walk on every startup/reload
+was slow. v0.3 makes startup cost bounded by the breadth of the top levels rather
+than the total file count. All additions preserve the read-only model and the
+v0.2.1 security guards (CSRF/origin/Host, pruned-dir read containment,
+executable-open deny-list, symlinked-config refusal).
+
+- **Lazy tree loading.** The initial `GET /api/tree` now returns only a *shallow*
+  tree (the top ~2 directory levels); directories below that arrive as **lazy
+  stubs** and are fetched on demand when you expand them via the new
+  `GET /api/tree?path=<dir>` endpoint (a directory's immediate children only).
+  The subtree endpoint is confined to the root and refuses pruned/hidden/ignored
+  directories, exactly like the read endpoints (404 otherwise). Search and the
+  full "recently modified" list lazily fetch the complete tree once
+  (`GET /api/tree?full=1`) so deep files are still found.
+- **Persistent scan cache.** A snapshot of every scanned directory (keyed by that
+  directory's mtime) is stored at `~/.md_tree_viewer/cache/<root-hash>-<sig>.json`.
+  Startup re-scans only the directories whose mtime changed (incremental rescan);
+  unchanged directories are reused from the cache. The cache file name embeds a
+  signature of `view_ext` + `ignore`, so a config change never serves a stale
+  tree. **The cache directory is the only location written beyond the single
+  config file**, the write refuses a symlinked target, and `--no-cache` disables
+  it entirely (every scan walks fresh). A corrupt/old cache is ignored (fail-safe
+  full rescan), never an error.
+- **`ignore` config + exclusion.** The built-in `NOISE_DIRS` skip (`.git`,
+  `node_modules`, `__pycache__`, `.venv`, `dist`, …) is honoured everywhere; you
+  can now add your own directory **names** to skip via config `ignore: [...]`
+  (editable in the settings panel). Names only — any token with a path separator
+  or `..` is dropped, so `ignore` can only exclude, never become a path
+  primitive. Ignored directories are excluded from the tree, from `_safe_resolve`,
+  and from the lazy subtree endpoint.
+
+### Changed
+- New `--no-cache` CLI flag. The config schema gains an optional `ignore` array.
+  `GET /api/config` reports the effective `ignore` list. README updated.
+
 ## [0.2.1] - 2026-06-01
 
 ### Security
