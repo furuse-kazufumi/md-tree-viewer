@@ -1039,21 +1039,36 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main(argv: list[str] | None = None) -> int:
-    global ROOT
+    global ROOT, VIEW_EXT, ENABLE_OPEN
     ap = argparse.ArgumentParser(
         prog="mdtree",
-        description="Local read-only web viewer for Markdown / PDF / SVG files under a directory tree.",
+        description="Local web viewer for Markdown / PDF / SVG files under a directory tree.",
     )
     ap.add_argument("root", nargs="?", default=str(Path.cwd()),
                     help="root directory to scan (default: current directory)")
     ap.add_argument("--port", type=int, default=8765, help="local server port (default: 8765)")
     ap.add_argument("--no-browser", action="store_true", help="do not open a browser automatically")
+    ap.add_argument("--ext", default=None, metavar='".a,.b"',
+                    help="comma/space-separated viewable extensions, overriding the config "
+                         '(default: ".md,.markdown,.pdf,.svg")')
+    ap.add_argument("--enable-open", action="store_true",
+                    help="allow POST /api/open to launch non-viewable files with their OS "
+                         "association (default off; root-confined either way)")
     args = ap.parse_args(argv)
 
     ROOT = Path(args.root).resolve()
     if not ROOT.is_dir():
         print(f"[ERROR] root not found: {ROOT}", file=sys.stderr)
         return 1
+
+    # Load the on-disk config (sets VIEW_EXT / ENABLE_OPEN / project_icons), then
+    # let CLI flags override it for this run (they do not rewrite the file).
+    load_config(ROOT)
+    if args.ext is not None:
+        ext = _normalise_ext_list(args.ext)
+        VIEW_EXT = tuple(ext) if ext else DEFAULT_VIEW_EXT
+    if args.enable_open:
+        ENABLE_OPEN = True
     _tree_cache["json"] = None
 
     url = f"http://127.0.0.1:{args.port}/"
