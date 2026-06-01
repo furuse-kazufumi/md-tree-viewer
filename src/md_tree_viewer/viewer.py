@@ -19,10 +19,13 @@ Features:
 - Dependency dirs, virtualenvs and .git are skipped while scanning (fast, no noise).
 - Settings (viewable extensions, per-project icons, theme, enable-open) persist to
   a single config file (``<root>/.mdtree.json`` or ``~/.md_tree_viewer.json``).
-- Mostly read-only. GET serves only viewable files under the root (path traversal
-  is prevented). The ONLY write endpoint, POST /api/config, writes that one config
-  file and nothing else. POST /api/open launches a root-confined file with its OS
-  association, and is disabled by default (opt-in via --enable-open / config).
+- Mostly read-only. GET serves only viewable files under the root, outside pruned
+  dirs (.git/node_modules/…), with path traversal and symlink escape prevented.
+  The ONLY write endpoint, POST /api/config, writes that one config file (never a
+  symlink) and nothing else. POST /api/open launches a root-confined, non-pruned,
+  non-executable file with its OS association, and is disabled by default (opt-in
+  via --enable-open / config). Both POSTs require a per-process CSRF token and a
+  loopback Host/Origin (fail-closed), so a browser page cannot forge them.
 - Dependencies: Python standard library only (rendering uses marked.js +
   mermaid.js loaded from a CDN).
 """
