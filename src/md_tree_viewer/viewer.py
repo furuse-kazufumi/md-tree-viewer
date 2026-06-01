@@ -566,6 +566,7 @@ def _os_open(target: Path) -> None:
 INDEX_HTML = r"""<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf-token" content="__CSRF_TOKEN__">
 <title>Markdown Tree Viewer — __ROOT__</title>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script type="module">
