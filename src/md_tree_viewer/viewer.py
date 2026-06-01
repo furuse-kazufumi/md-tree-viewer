@@ -382,6 +382,94 @@ def _extract_meta(path: Path) -> tuple[str, str]:
 
 
 # --------------------------------------------------------------------------- #
+# Persistent scan cache (v0.3). The ONLY directory this process writes to beyond
+# the single config file: ~/.md_tree_viewer/cache/. The cache stores, per root, a
+# snapshot of every scanned directory keyed by that directory's mtime, so startup
+# re-scans only the directories that changed.
+# --------------------------------------------------------------------------- #
+
+# Bumped when the on-disk cache JSON shape changes, so an old cache is ignored.
+_CACHE_VERSION = 1
+
+
+def _cache_dir() -> Path | None:
+    """The single directory the scan cache may ever write to:
+    ``~/.md_tree_viewer/cache``. Returns None if the home dir is unavailable."""
+    try:
+        return Path.home() / ".md_tree_viewer" / "cache"
+    except (RuntimeError, OSError):
+        return None
+
+
+def _scan_signature() -> str:
+    """A short, stable hash of the inputs that change what the scan would emit
+    (active VIEW_EXT + ignore set). Mixed into the cache file name so a config
+    change does not silently serve a stale tree built under a different config."""
+    payload = json.dumps(
+        {"ext": sorted(VIEW_EXT), "ignore": sorted(IGNORE_DIRS)},
+        ensure_ascii=False, sort_keys=True,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+
+
+def _root_hash(root: Path) -> str:
+    """A stable filesystem-safe hash for a root path (so two roots never collide
+    on one cache file). Uses the resolved, normalised absolute path."""
+    try:
+        key = str(root.resolve()).lower()
+    except OSError:
+        key = str(root).lower()
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+
+
+def _cache_path(root: Path) -> Path | None:
+    """Resolve the cache file for `root` under the cache dir. The name embeds both
+    the root hash and the scan signature (view_ext + ignore)."""
+    cdir = _cache_dir()
+    if cdir is None:
+        return None
+    return cdir / f"{_root_hash(root)}-{_scan_signature()}.json"
+
+
+def _load_cache(root: Path) -> dict[str, dict]:
+    """Load the per-directory snapshot map for `root` (``rel -> {mtime, files,
+    dirs}``). Returns ``{}`` on any error/absence/version mismatch — fail-safe, so
+    a corrupt cache simply triggers a full rescan rather than an error."""
+    cpath = _cache_path(root)
+    if cpath is None or not cpath.is_file():
+        return {}
+    try:
+        raw = json.loads(cpath.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(raw, dict) or raw.get("version") != _CACHE_VERSION:
+        return {}
+    dirs = raw.get("dirs")
+    return dirs if isinstance(dirs, dict) else {}
+
+
+def _save_cache(root: Path, dir_map: dict[str, dict]) -> None:
+    """Persist the per-directory snapshot map for `root`. Best-effort: any write
+    failure is swallowed (the cache is an optimisation, never required for
+    correctness). Writes ONLY inside the cache dir."""
+    cpath = _cache_path(root)
+    if cpath is None:
+        return
+    try:
+        cpath.parent.mkdir(parents=True, exist_ok=True)
+        # Refuse to follow a symlinked cache file (defensive; matches the config
+        # write hardening), so the cache cannot be redirected to an outside file.
+        if cpath.is_symlink() or (cpath.exists() and not cpath.is_file()):
+            return
+        payload = {"version": _CACHE_VERSION, "root": str(root), "dirs": dir_map}
+        tmp = cpath.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, cpath)
+    except OSError:
+        return
+
+
+# --------------------------------------------------------------------------- #
 # Per-directory scanning (the cacheable unit) and tree assembly (v0.3).
 # --------------------------------------------------------------------------- #
 
