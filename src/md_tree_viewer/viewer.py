@@ -1369,17 +1369,22 @@ async function openFile(node, el) {
   contentEl.scrollTop = 0;
 }
 
-// Filtering works on the flatFiles array (not DOM walk) and renders only the results (debounced).
+// Filtering searches the COMPLETE file list (fetched lazily; see ensureFullTree)
+// so deep files are found even though the tree is loaded shallowly. Debounced.
 let fTimer;
 filterEl.addEventListener('input', () => { clearTimeout(fTimer); fTimer = setTimeout(applyFilter, 130); });
-function applyFilter() {
+async function applyFilter() {
   const q = filterEl.value.toLowerCase().trim();
   if (!q) {
     recentWrap.style.display = ''; projWrap.style.display = ''; resultsEl.style.display = 'none';
-    countEl.textContent = flatFiles.length + ' files';
+    countEl.textContent = (fullFlatFiles || flatFiles).length + ' files';
     return;
   }
-  const hit = flatFiles.filter(f =>
+  const pool = await ensureFullTree();
+  // The query may have changed (or been cleared) while we awaited the full tree.
+  if (filterEl.value.toLowerCase().trim() !== q) return;
+  if (!q) { applyFilter(); return; }
+  const hit = pool.filter(f =>
     (f.name + ' ' + (f.title || '') + ' ' + (f.desc || '') + ' ' + f.path).toLowerCase().includes(q));
   const LIM = 400;
   resultsEl.innerHTML = '';
@@ -1392,7 +1397,7 @@ function applyFilter() {
     m.textContent = '... ' + (hit.length - LIM) + ' more. Narrow the filter.'; resultsEl.appendChild(m);
   }
   recentWrap.style.display = 'none'; projWrap.style.display = 'none'; resultsEl.style.display = '';
-  countEl.textContent = hit.length + ' / ' + flatFiles.length + ' files';
+  countEl.textContent = hit.length + ' / ' + pool.length + ' files';
 }
 
 (function(){
