@@ -1,7 +1,9 @@
 """Tests for md_tree_viewer: metadata extraction, tree pruning, path-traversal
-safety, and the HTTP endpoints."""
+safety, the HTTP endpoints, and the v0.2 config / VIEW_EXT / open / icons features."""
 import json
 import threading
+import urllib.error
+import urllib.request
 from http.server import ThreadingHTTPServer
 from urllib.request import urlopen
 
