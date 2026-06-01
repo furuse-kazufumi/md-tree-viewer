@@ -668,36 +668,38 @@ def _build_tree(root: Path, max_depth: int | None = None,
     return node
 
 
-def _dir_has_content(root: Path, rel: str, cache: dict, new_cache: dict) -> bool:
-    """True if `rel` (or any descendant, outside pruned dirs) holds a viewable
-    file. Used to decide whether a truncated (lazy) directory is worth showing.
-    Populates ``new_cache`` with every directory it scans so the work is not
-    repeated when the dir is later expanded."""
+def _dir_has_viewable(root: Path, rel: str) -> bool:
+    """True if `rel` (or any descendant outside pruned dirs) holds a viewable file.
+
+    A lightweight existence probe used to decide whether a truncated (lazy)
+    directory is worth showing as a stub: it short-circuits on the FIRST viewable
+    file found and never extracts Markdown metadata, so it does not negate the
+    bounded-startup goal of lazy loading even on a large deep tree (it descends
+    only as far as the first hit). ``os.scandir`` keeps the per-dir cost minimal."""
     stack = [rel]
-    found = False
     while stack:
         cur = stack.pop()
         dpath = root if cur == "" else root / cur
         try:
-            mtime = dpath.stat().st_mtime
+            with os.scandir(dpath) as it:
+                entries = list(it)
         except OSError:
-            mtime = 0.0
-        cached = cache.get(cur)
-        if cached is not None and cached.get("mtime") == mtime:
-            files = cached.get("files", [])
-            child_dirs = cached.get("dirs", [])
-        else:
-            files, child_dirs, mtime = _scan_one_dir(root, cur)
-        if cur not in new_cache:
-            new_cache[cur] = {"mtime": mtime,
-                              "files": [dict(e) for e in files],
-                              "dirs": list(child_dirs)}
-        if files:
-            found = True
-            # keep scanning so the cache is filled, but we already know the answer
-        for d in child_dirs:
+            continue
+        subdirs: list[str] = []
+        for de in entries:
+            name = de.name
+            try:
+                is_dir = de.is_dir()
+            except OSError:
+                is_dir = False
+            if is_dir:
+                if not _skip_dir(name):
+                    subdirs.append(name)
+            elif Path(name).suffix.lower() in VIEW_EXT:
+                return True                     # first viewable file → done
+        for d in subdirs:
             stack.append(d if cur == "" else f"{cur}/{d}")
-    return found
+    return False
 
 
 _GH_REPOS: dict | None = None
