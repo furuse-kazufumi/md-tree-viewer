@@ -117,9 +117,18 @@ launched with the machine's default application via `POST /api/open?path=…`
   operator opts in. (A private/local build of the same code may instead default
   it on for personal convenience — that on/off default is the only behavioural
   difference between the two builds.)
-- The path is **confined to the root** and must be an existing file. The server
-  passes a single validated path to the launcher (never a shell string), so it
-  does not create an arbitrary-command-execution surface.
+- The path is **confined to the root**, must be an existing file, and must **not**
+  live in a pruned/hidden directory (`.git`, `node_modules`, …). The server passes
+  a single validated path to the launcher (never a shell string), so it does not
+  create a shell-injection surface.
+- **Executable types are refused.** Even when enabled, the server rejects file
+  types that the OS association would *run* rather than open (`.exe`, `.bat`,
+  `.cmd`, `.ps1`, `.vbs`, `.js`, `.hta`, `.lnk`, `.msi`, …). This keeps the
+  feature for viewing documents (e.g. `.xlsx`, `.png`) and prevents it from
+  becoming a code-execution primitive if an executable happens to sit under the
+  root.
+- Like every state-changing request, `POST /api/open` is **CSRF-protected** (see
+  *Security* below), so another web page open in your browser cannot trigger it.
 
 ### Security
 
