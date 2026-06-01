@@ -303,9 +303,7 @@ def _extract_meta(path: Path) -> tuple[str, str]:
 
 def _build_tree(root: Path) -> dict:
     """Walk the root with pruning and return a tree of only the directories that
-    contain a .md/.markdown/.pdf/.svg file."""
-    import os
-
+    contain a viewable file (per the active VIEW_EXT)."""
     nodes: dict[str, dict] = {}  # rel-dir -> node
 
     def node_for(rel: str) -> dict:
