@@ -306,6 +306,7 @@ def config_payload() -> dict:
         "project_icons": dict(CONFIG.get("project_icons") or REPO_ICON),
         "enable_open": bool(ENABLE_OPEN),
         "theme": CONFIG.get("theme", "light"),
+        "ignore": sorted(IGNORE_DIRS),
         "default_view_ext": list(DEFAULT_VIEW_EXT),
         "renderable_ext": list(RENDERABLE_EXT),
         "config_path": str(CONFIG_PATH) if CONFIG_PATH else "",
