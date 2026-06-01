@@ -50,7 +50,12 @@ def sample_tree(tmp_path, monkeypatch):
     monkeypatch.setattr(viewer, "ENABLE_OPEN", False)
     monkeypatch.setattr(viewer, "CONFIG", {})
     monkeypatch.setattr(viewer, "CONFIG_PATH", tmp_path / ".mdtree.json")
-    viewer._tree_cache["json"] = None
+    # v0.3: reset ignore set and isolate the persistent scan cache to a tmp dir so
+    # tests never touch ~/.md_tree_viewer and never see each other's cache.
+    monkeypatch.setattr(viewer, "IGNORE_DIRS", frozenset())
+    cache_dir = tmp_path / "_cache"
+    monkeypatch.setattr(viewer, "_cache_dir", lambda: cache_dir)
+    viewer._reset_tree_cache()
     return tmp_path
 
 
