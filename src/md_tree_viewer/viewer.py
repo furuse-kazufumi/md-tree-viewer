@@ -110,10 +110,6 @@ REPO_ICON: dict[str, str] = {}
 # Default OFF for the OSS package; enabled only via --enable-open or config.
 ENABLE_OPEN = False
 
-# The port the server is actually bound to (set in main()); used to validate the
-# Host / Origin / Referer headers of state-changing POSTs. 0 means "not bound yet".
-BOUND_PORT = 0
-
 # A per-process random token, regenerated on every start, embedded in the served
 # HTML and required as the X-CSRF-Token header on every POST. Because a custom
 # header is not a CORS "simple request", a cross-origin page cannot set it without
