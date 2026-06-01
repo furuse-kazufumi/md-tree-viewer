@@ -1549,8 +1549,45 @@ async function openFile(node, el) {
     contentEl.scrollTop = 0;
     return;
   }
-  if (node.ext === 'svg') {
-    contentEl.innerHTML = pathHeader(node) + '<div class="doc"><img src="/api/raw?path=' + encodeURIComponent(node.path) + '" alt="' + node.name + '" style="max-width:100%"></div>';
+  if (node.ext === 'svg' || node.ext === 'image') {
+    // Images (and SVG via <img>) render but never execute embedded script.
+    const raw = '/api/raw?path=' + encodeURIComponent(node.path);
+    contentEl.innerHTML = pathHeader(node)
+      + '<div class="doc"><img src="' + raw + '" alt="' + escapeHTML(node.name)
+      + '" style="max-width:100%"></div>';
+    contentEl.scrollTop = 0;
+    return;
+  }
+  if (node.ext === 'video') {
+    const raw = '/api/raw?path=' + encodeURIComponent(node.path);
+    contentEl.innerHTML = pathHeader(node)
+      + '<div class="doc"><video controls preload="metadata" style="max-width:100%" src="'
+      + raw + '">Your browser cannot play this video.</video></div>';
+    contentEl.scrollTop = 0;
+    return;
+  }
+  if (node.ext === 'audio') {
+    const raw = '/api/raw?path=' + encodeURIComponent(node.path);
+    contentEl.innerHTML = pathHeader(node)
+      + '<div class="doc"><audio controls preload="metadata" style="width:100%" src="'
+      + raw + '">Your browser cannot play this audio.</audio></div>';
+    contentEl.scrollTop = 0;
+    return;
+  }
+  if (node.ext === 'text') {
+    // Text / code: fetch the raw bytes and show them in an ESCAPED <pre>. The
+    // escape is the XSS guard — a <script> inside a .txt/.json becomes inert
+    // text, never executable markup. The optional language name is shown as a
+    // small label only (no highlighting needed for safety).
+    const r = await fetch('/api/raw?path=' + encodeURIComponent(node.path));
+    if (!r.ok) { contentEl.innerHTML = '<div class="empty">Could not load: ' + escapeHTML(node.path) + '</div>'; return; }
+    const txt = await r.text();
+    const lang = (node.name.match(/\.([A-Za-z0-9]+)$/) || [,''])[1].toLowerCase();
+    contentEl.innerHTML = pathHeader(node)
+      + '<div class="doc">'
+      + (lang ? '<div class="when" style="margin-bottom:8px">' + escapeHTML(lang) + '</div>' : '')
+      + '<pre class="textview"><code>' + escapeHTML(txt) + '</code></pre></div>';
+    contentEl.scrollTop = 0;
     return;
   }
   if (node.ext === 'pdf') {
