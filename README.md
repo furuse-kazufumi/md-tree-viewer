@@ -95,6 +95,10 @@ Open the **⚙️ settings panel** in the top-left to change, and persist:
 - **Project icons** — assign an emoji to a top-level directory
   (`{"<dir>": "<emoji>"}`). The tree shows that emoji; unset projects fall back
   to a deterministic colour dot, so you can always tell projects apart.
+- **Ignore directories** — extra directory **names** to skip while scanning, on
+  top of the built-in skip list (`.git`, `node_modules`, `__pycache__`, `.venv`,
+  caches, …). Names only — anything with a path separator is ignored, so this can
+  only ever *exclude* folders.
 - **OS-association open** — toggle whether non-viewable files can be launched.
 - **Theme** — light or dark.
 
@@ -105,10 +109,24 @@ this order: `<root>/.mdtree.json`, then `~/.md_tree_viewer.json`. The schema:
 {
   "view_ext": [".md", ".markdown", ".pdf", ".svg"],
   "project_icons": { "docs": "📘" },
+  "ignore": ["fixtures", "vendor"],
   "enable_open": false,
   "theme": "light"
 }
 ```
+
+### Startup speed
+
+For a root with thousands of files the tree is loaded **lazily**: the server
+sends only the top ~2 directory levels at startup, and each deeper folder's
+contents are fetched the first time you expand it (`GET /api/tree?path=<dir>`).
+A **persistent scan cache** (`~/.md_tree_viewer/cache/`) stores a snapshot of
+every scanned directory keyed by its modification time, so a later start
+re-scans only the directories that actually changed; unchanged folders are
+reused. The cache writes nowhere else, refuses a symlinked target, and is keyed
+by the active `view_ext`/`ignore` so a config change never serves a stale tree.
+Pass `--no-cache` to turn it off. (Search and the "recently modified" list fetch
+the complete tree once in the background, so deep files are still searchable.)
 
 ### Opening non-viewable files (OS association)
 
