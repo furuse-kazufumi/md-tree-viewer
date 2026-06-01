@@ -648,15 +648,11 @@ def _file_entry(f: str, rel: str, full: Path) -> dict | None:
         mtime = full.stat().st_mtime
     except OSError:
         mtime = 0.0
-    renderable = ext in RENDERABLE_EXT
-    if ext == ".pdf":
-        kind = "pdf"
-    elif ext == ".svg":
-        kind = "svg"
-    elif ext in (".md", ".markdown"):
-        kind = "md"
-    else:
-        kind = "other"   # listed via config but not rendered inline
+    # v0.4: the content-type registry decides the renderer kind. A kind in
+    # _INLINE_KINDS renders inline (renderable); "other" (listed via config but
+    # not in the registry) stays non-viewable and opens via the OS association.
+    kind = _kind_for_ext(ext)
+    renderable = kind in _INLINE_KINDS
     entry = {
         "name": f,
         "path": (f if rel == "" else f"{rel}/{f}"),
@@ -665,11 +661,23 @@ def _file_entry(f: str, rel: str, full: Path) -> dict | None:
         "renderable": renderable,
         "mtime": mtime,
     }
-    if ext == ".pdf":
+    # Markdown metadata (title/description) is filled later in parallel; every
+    # other kind gets a short type label so the tree row is informative.
+    if kind == "md":
+        pass
+    elif kind == "pdf":
         entry["title"], entry["desc"] = f, "(PDF)"
-    elif ext == ".svg":
+    elif kind == "svg":
         entry["title"], entry["desc"] = f, "(SVG image)"
-    elif kind != "md":
+    elif kind == "image":
+        entry["title"], entry["desc"] = f, f"(image · {ext.lstrip('.')})"
+    elif kind == "video":
+        entry["title"], entry["desc"] = f, f"(video · {ext.lstrip('.')})"
+    elif kind == "audio":
+        entry["title"], entry["desc"] = f, f"(audio · {ext.lstrip('.')})"
+    elif kind == "text":
+        entry["title"], entry["desc"] = f, f"({ext.lstrip('.') or 'text'})"
+    else:  # "other" — listed via config but not rendered inline
         entry["title"], entry["desc"] = f, f"({ext.lstrip('.').upper() or 'file'})"
     return entry
 
