@@ -3,6 +3,7 @@ safety, the HTTP endpoints, and the v0.2 config / VIEW_EXT / open / icons featur
 import json
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import ThreadingHTTPServer
 from urllib.request import urlopen
