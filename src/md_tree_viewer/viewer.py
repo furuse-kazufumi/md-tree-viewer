@@ -616,9 +616,14 @@ def _build_tree(root: Path, max_depth: int | None = None,
         for d in child_dirs:
             child_rel = d if rel == "" else f"{rel}/{d}"
             if truncate:
-                # Don't descend; emit a lazy stub only if it actually has content.
-                if _dir_has_content(root, child_rel, cache, new_cache):
-                    cm = new_cache.get(child_rel, {}).get("mtime", 0.0)
+                # Don't descend fully; emit a lazy stub only if the subtree holds a
+                # viewable file. The probe short-circuits on the first hit and does
+                # NOT extract metadata, so a shallow build stays cheap on big trees.
+                try:
+                    cm = (root / child_rel).stat().st_mtime
+                except OSError:
+                    cm = 0.0
+                if _dir_has_viewable(root, child_rel):
                     children.append({
                         "name": d, "type": "dir", "children": [],
                         "lazy": True, "mtime": cm,
