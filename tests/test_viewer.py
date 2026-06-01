@@ -100,7 +100,7 @@ def test_build_tree_prunes_noise_and_non_viewable(sample_tree):
     assert "guide.md" in blob
     assert "diagram.svg" in blob
     assert "ignored.md" not in blob       # node_modules pruned
-    assert "secret.txt" not in blob       # non-viewable extension excluded
+    assert "secret.dat" not in blob       # non-viewable extension excluded
 
 
 def test_safe_resolve_blocks_traversal_and_bad_ext(sample_tree):
