@@ -613,8 +613,15 @@ function makeFileSpan(node, when, showPath) {
   span.title = node.path + (node.title ? ('\n' + node.title) : '') + (node.desc ? ('\n' + node.desc) : '');
   const nm = document.createElement('span'); nm.className = 'fname';
   const repo = node.path.split('/')[0];                       // top-level dir = "repo"
-  const dot = document.createElement('span'); dot.className = 'repodot';
-  dot.style.background = 'hsl(' + repoHue(repo) + ' 60% 52%)'; dot.title = repo; nm.appendChild(dot);
+  // Icon resolution: config/baked project_icons emoji first, else a colour dot.
+  const icons = (treeData && treeData.project_icons) || {};
+  if (icons[repo]) {
+    const ic = document.createElement('span'); ic.className = 'repoicon';
+    ic.textContent = icons[repo] + ' '; ic.title = repo; nm.appendChild(ic);
+  } else {
+    const dot = document.createElement('span'); dot.className = 'repodot';
+    dot.style.background = 'hsl(' + repoHue(repo) + ' 60% 52%)'; dot.title = repo; nm.appendChild(dot);
+  }
   nm.appendChild(document.createTextNode(node.name));
   span.appendChild(nm);
   if (when) { const w = document.createElement('span'); w.className = 'when'; w.textContent = ' · ' + when; nm.appendChild(w); }
