@@ -136,9 +136,9 @@ def test_http_endpoints(sample_tree):
         # Raw API serves the svg with the right content type.
         with urlopen(base + "/api/raw?path=docs/diagram.svg") as r:
             assert r.headers["Content-Type"] == "image/svg+xml"
-        # Disallowed file 404s.
+        # Disallowed file 404s (extension not in the registry / not viewable).
         try:
-            urlopen(base + "/api/file?path=secret.txt")
+            urlopen(base + "/api/file?path=secret.dat")
             assert False, "expected 404"
         except urllib.error.HTTPError as e:
             assert e.code == 404
