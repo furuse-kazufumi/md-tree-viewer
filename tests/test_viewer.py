@@ -607,18 +607,25 @@ def test_ignore_round_trips_through_config_post(sample_tree):
 
 
 def test_shallow_build_emits_lazy_stub_for_deep_dirs(deep_tree):
-    """With max_depth=SHALLOW_DEPTH, directories deeper than the limit arrive as
-    lazy stubs (empty children, lazy=True), so startup does not walk everything."""
+    """With max_depth=SHALLOW_DEPTH (=2), the top 2 directory levels are walked and
+    anything deeper arrives as a lazy stub (empty children, lazy=True), so startup
+    does not walk everything. Here docs(1) → sub(2) are shown, deep(3) is lazy."""
     shallow = viewer._build_tree(deep_tree, max_depth=viewer.SHALLOW_DEPTH, use_cache=False)
-    # Find docs/sub in the shallow tree.
     docs = [c for c in shallow["children"] if c.get("name") == "docs"][0]
     sub = [c for c in docs["children"] if c.get("name") == "sub"][0]
-    # At depth == SHALLOW_DEPTH (2), `sub` is truncated → lazy stub, no children.
-    assert sub.get("lazy") is True
-    assert sub["children"] == []
+    assert sub.get("lazy") is not True          # within the depth limit → fully built
+    deep = [c for c in sub["children"] if c.get("name") == "deep"][0]
+    # `deep` is at level 3 (> limit) → lazy stub with no children.
+    assert deep.get("lazy") is True
+    assert deep["children"] == []
     # The deep file is NOT present in the shallow payload.
     assert "deepfile.md" not in json.dumps(shallow)
-    # But the FULL build does contain it (depth unlimited).
+    # A depth-1 build truncates even sooner: docs' subdirs become lazy stubs.
+    d1 = viewer._build_tree(deep_tree, max_depth=1, use_cache=False)
+    docs1 = [c for c in d1["children"] if c.get("name") == "docs"][0]
+    sub1 = [c for c in docs1["children"] if c.get("name") == "sub"][0]
+    assert sub1.get("lazy") is True and sub1["children"] == []
+    # But the FULL build does contain the deep file (depth unlimited).
     full = viewer._build_tree(deep_tree, use_cache=False)
     assert "deepfile.md" in json.dumps(full)
 
