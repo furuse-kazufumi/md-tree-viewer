@@ -91,14 +91,158 @@ NOISE_DIRS = {
     ".vscode", "site-packages", "target", ".cache", ".eggs", ".next", ".gradle", "htmlcov",
 }
 
+# --------------------------------------------------------------------------- #
+# Content-type registry (v0.4). Maps a file extension to how the viewer renders
+# it inline and what HTTP Content-Type /api/raw serves it with. Only "safe
+# types" — ones a browser can display natively WITHOUT running any embedded
+# script — are listed here:
+#   - image  → <img>      (raster/vector images render but never execute script)
+#   - video  → <video>    (controls)
+#   - audio  → <audio>    (controls)
+#   - text   → escaped <pre> (the client HTML-escapes the body, so a <script> tag
+#                             inside a .txt/.json is shown as text, never run)
+#   - md     → marked.js (existing GFM/Mermaid renderer)
+#   - pdf    → <iframe>   (existing)
+#   - svg    → <img>      (existing; v0.4 leaves SVG on the <img> path — a future
+#                          increment sandboxes it in an <iframe>)
+# Each entry is (kind, mime). The `kind` drives the client renderer; the `mime`
+# is the exact Content-Type /api/raw sends (always with X-Content-Type-Options:
+# nosniff + Content-Disposition: inline so the browser does not MIME-sniff a
+# text body into something executable and does not auto-download it).
+#
+# SVG and HTML are intentionally NOT widened here: SVG keeps its existing <img>
+# path (an <img>-loaded SVG cannot run script), and HTML is deferred to a later
+# increment that will sandbox it in an <iframe>. Adding HTML here would let a
+# served .html run script in the viewer's own origin.
+#
+# Note on text MIME: text/* bodies are served as text/plain (never text/html),
+# so even with a hypothetical sniff bypass the browser would not treat them as
+# markup; the client-side HTML-escape into <pre> is the primary XSS defence and
+# nosniff is defence-in-depth.
+_TEXT_MIME = "text/plain; charset=utf-8"
+
+CONTENT_TYPES: dict[str, tuple[str, str]] = {
+    # --- existing types (unchanged behaviour) ---
+    ".md": ("md", _TEXT_MIME),
+    ".markdown": ("md", _TEXT_MIME),
+    ".pdf": ("pdf", "application/pdf"),
+    ".svg": ("svg", "image/svg+xml"),
+    # --- images → <img> (no script execution) ---
+    ".png": ("image", "image/png"),
+    ".jpg": ("image", "image/jpeg"),
+    ".jpeg": ("image", "image/jpeg"),
+    ".gif": ("image", "image/gif"),
+    ".webp": ("image", "image/webp"),
+    ".avif": ("image", "image/avif"),
+    ".bmp": ("image", "image/bmp"),
+    ".ico": ("image", "image/x-icon"),
+    # --- video → <video controls> ---
+    ".mp4": ("video", "video/mp4"),
+    ".webm": ("video", "video/webm"),
+    ".ogv": ("video", "video/ogg"),
+    # --- audio → <audio controls> ---
+    ".mp3": ("audio", "audio/mpeg"),
+    ".wav": ("audio", "audio/wav"),
+    ".ogg": ("audio", "audio/ogg"),
+    ".m4a": ("audio", "audio/mp4"),
+    ".flac": ("audio", "audio/flac"),
+    # --- text / code → HTML-escaped <pre> (served as text/plain) ---
+    ".txt": ("text", _TEXT_MIME),
+    ".json": ("text", _TEXT_MIME),
+    ".csv": ("text", _TEXT_MIME),
+    ".tsv": ("text", _TEXT_MIME),
+    ".xml": ("text", _TEXT_MIME),
+    ".yaml": ("text", _TEXT_MIME),
+    ".yml": ("text", _TEXT_MIME),
+    ".toml": ("text", _TEXT_MIME),
+    ".ini": ("text", _TEXT_MIME),
+    ".cfg": ("text", _TEXT_MIME),
+    ".conf": ("text", _TEXT_MIME),
+    ".log": ("text", _TEXT_MIME),
+    ".rst": ("text", _TEXT_MIME),
+    ".tex": ("text", _TEXT_MIME),
+    ".env": ("text", _TEXT_MIME),
+    ".properties": ("text", _TEXT_MIME),
+    ".py": ("text", _TEXT_MIME),
+    ".pyi": ("text", _TEXT_MIME),
+    ".js": ("text", _TEXT_MIME),
+    ".mjs": ("text", _TEXT_MIME),
+    ".cjs": ("text", _TEXT_MIME),
+    ".jsx": ("text", _TEXT_MIME),
+    ".ts": ("text", _TEXT_MIME),
+    ".tsx": ("text", _TEXT_MIME),
+    ".c": ("text", _TEXT_MIME),
+    ".h": ("text", _TEXT_MIME),
+    ".cpp": ("text", _TEXT_MIME),
+    ".cc": ("text", _TEXT_MIME),
+    ".cxx": ("text", _TEXT_MIME),
+    ".hpp": ("text", _TEXT_MIME),
+    ".hh": ("text", _TEXT_MIME),
+    ".cs": ("text", _TEXT_MIME),
+    ".rs": ("text", _TEXT_MIME),
+    ".go": ("text", _TEXT_MIME),
+    ".java": ("text", _TEXT_MIME),
+    ".kt": ("text", _TEXT_MIME),
+    ".kts": ("text", _TEXT_MIME),
+    ".rb": ("text", _TEXT_MIME),
+    ".php": ("text", _TEXT_MIME),
+    ".swift": ("text", _TEXT_MIME),
+    ".scala": ("text", _TEXT_MIME),
+    ".sh": ("text", _TEXT_MIME),
+    ".bash": ("text", _TEXT_MIME),
+    ".zsh": ("text", _TEXT_MIME),
+    ".bat": ("text", _TEXT_MIME),
+    ".cmd": ("text", _TEXT_MIME),
+    ".ps1": ("text", _TEXT_MIME),
+    ".psm1": ("text", _TEXT_MIME),
+    ".sql": ("text", _TEXT_MIME),
+    ".r": ("text", _TEXT_MIME),
+    ".lua": ("text", _TEXT_MIME),
+    ".pl": ("text", _TEXT_MIME),
+    ".dockerfile": ("text", _TEXT_MIME),
+    ".gradle": ("text", _TEXT_MIME),
+    ".gitignore": ("text", _TEXT_MIME),
+    ".diff": ("text", _TEXT_MIME),
+    ".patch": ("text", _TEXT_MIME),
+}
+
+# The kinds the viewer renders inline (so a file of this kind is `renderable`).
+# Everything else listed in VIEW_EXT but absent from CONTENT_TYPES is
+# "non-viewable" and can only be opened via OS association.
+_INLINE_KINDS = frozenset({"md", "pdf", "svg", "image", "video", "audio", "text"})
+
 # Default viewable extensions. The active set lives in VIEW_EXT, which the config
 # file and the --ext CLI flag may override at startup (see load_config / main).
-DEFAULT_VIEW_EXT = (".md", ".markdown", ".pdf", ".svg")
+# v0.4: defaults expand to every safe content type the registry can render
+# inline (images / video / audio / text+code), in addition to the original
+# md / pdf / svg. Config may still add/remove extensions (v0.2 behaviour).
+DEFAULT_VIEW_EXT: tuple[str, ...] = tuple(CONTENT_TYPES.keys())
 VIEW_EXT: tuple[str, ...] = DEFAULT_VIEW_EXT
 
 # Extensions that the viewer renders inline (everything else, even if listed in
-# VIEW_EXT, is "non-viewable" and can only be opened via OS association).
-RENDERABLE_EXT = (".md", ".markdown", ".pdf", ".svg")
+# VIEW_EXT, is "non-viewable" and can only be opened via OS association). v0.4:
+# derived from the content-type registry so it always matches what the client
+# can display.
+RENDERABLE_EXT: tuple[str, ...] = tuple(
+    ext for ext, (kind, _mime) in CONTENT_TYPES.items() if kind in _INLINE_KINDS
+)
+
+
+def _kind_for_ext(ext: str) -> str:
+    """The renderer kind for a (lower-cased, dot-prefixed) extension per the
+    content-type registry, or "other" for a type listed in VIEW_EXT but not
+    rendered inline (it opens via the OS association instead)."""
+    entry = CONTENT_TYPES.get(ext.lower())
+    return entry[0] if entry else "other"
+
+
+def _mime_for_ext(ext: str) -> str:
+    """The exact Content-Type /api/raw serves a (lower-cased, dot-prefixed)
+    extension with, per the content-type registry. Falls back to a plain-text
+    octet-safe default for anything unknown (never text/html, never a sniffable
+    type), so an unrecognised extension is served inertly."""
+    entry = CONTENT_TYPES.get(ext.lower())
+    return entry[1] if entry else _TEXT_MIME
 
 # Extensions that the OS "open" association would EXECUTE rather than view
 # (ShellExecute on Windows runs these). POST /api/open refuses them so the
