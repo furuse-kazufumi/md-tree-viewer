@@ -375,7 +375,7 @@ const contentEl = document.getElementById('content');
 const countEl = document.getElementById('count');
 const filterEl = document.getElementById('filter');
 let activeEl = null, treeData = null, flatFiles = [], recentWrap = null, projWrap = null, resultsEl = null;
-const RECENT_KEY = 'mdv_recent_v1', RECENT_MAX = 12;
+const RECENT_KEY = 'mdv_recent_v1', RECENT_MAX = 40;
 const OPEN_KEY = 'mdv_open_dirs_v1', CR_KEY = 'mdv_collapsed_recent_v1';
 function loadSet(k){ try { return new Set(JSON.parse(localStorage.getItem(k))||[]); } catch(e){ return new Set(); } }
 function saveSet(k, s){ localStorage.setItem(k, JSON.stringify([...s])); }
@@ -499,7 +499,7 @@ function renderRecent() {
   const rec = getRecent();
   if (rec.length) {
     recentWrap.appendChild(makeSpecialSection('::recent_opened', '🕘 Recently opened',
-      rec.slice(0, 8).map(n => ({ node: n, when: timeago(n.ts) }))));
+      rec.slice(0, 30).map(n => ({ node: n, when: timeago(n.ts) }))));
   }
   const mod = flatFiles.filter(f => f.mtime).slice().sort((a, b) => b.mtime - a.mtime).slice(0, 8);
   if (mod.length) {
