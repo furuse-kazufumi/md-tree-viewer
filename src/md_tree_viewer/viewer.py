@@ -574,6 +574,21 @@ INDEX_HTML = r"""<!DOCTYPE html>
   #drag { width:5px; cursor:col-resize; background:transparent; }
   .empty { color:var(--muted); padding:40px; }
   #count { font-size:11px; color:var(--muted); padding:0 12px 6px; }
+  #settings { border-bottom:1px solid var(--border); padding:8px 12px 10px; font-size:12px;
+              max-height:55vh; overflow:auto; }
+  #settings.hidden { display:none; }
+  .setgrp { margin-bottom:10px; padding-bottom:8px; border-bottom:1px dashed var(--border); }
+  .settitle { font-weight:600; color:#57606a; margin-bottom:4px; }
+  .setrow { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:4px 0; }
+  .setnote { color:var(--muted); font-size:10.5px; margin-top:3px; }
+  #settings input[type=text], #settings input:not([type]) , #settings select {
+    border:1px solid var(--border); border-radius:5px; padding:3px 5px; font-size:12px;
+    background:var(--bg); color:var(--fg); }
+  #settings button { border:1px solid var(--border); border-radius:5px; padding:3px 8px;
+    background:var(--bg); color:var(--accent); cursor:pointer; font-size:12px; }
+  #settings button:hover { background:var(--side); }
+  .extitem, .iconitem { display:flex; align-items:center; gap:6px; margin:2px 0; }
+  .extitem .x, .iconitem .x { cursor:pointer; color:#b35900; font-weight:700; }
 </style></head>
 <body><div id="wrap">
   <div id="side">
