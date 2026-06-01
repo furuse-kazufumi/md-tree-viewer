@@ -34,10 +34,12 @@ Requires Python 3.10+.
 ## Usage
 
 ```bash
-mdtree                 # scan the current directory, open the browser
-mdtree path/to/docs    # scan a specific directory
-mdtree --port 9000     # use a different port (default 8765)
-mdtree --no-browser    # do not open a browser automatically
+mdtree                       # scan the current directory, open the browser
+mdtree path/to/docs          # scan a specific directory
+mdtree --port 9000           # use a different port (default 8765)
+mdtree --no-browser          # do not open a browser automatically
+mdtree --ext ".md,.rst"      # override the viewable extensions for this run
+mdtree --enable-open         # allow OS-association launch of non-viewable files
 ```
 
 You can also run it as a module:
