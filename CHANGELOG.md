@@ -4,6 +4,61 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-06-02
+
+### Added — safe inline rendering of more content types
+
+A **content-type registry** now maps each file extension to a renderer kind and
+an exact HTTP `Content-Type`, so the viewer renders every *safe* type a browser
+can display natively **without executing embedded script** — not just Markdown /
+PDF / SVG. All additions preserve the read-only model and the v0.2.1 / v0.3
+behaviour (CSRF/origin/Host guards, pruned-dir read containment, executable-open
+deny-list, symlinked-config/cache refusal, lazy loading, persistent scan cache).
+
+- **Images** (`.png` `.jpg` `.jpeg` `.gif` `.webp` `.avif` `.bmp` `.ico`) render
+  in an `<img>` — an image (including an `<img>`-loaded SVG) cannot run script.
+- **Video** (`.mp4` `.webm` `.ogv`) renders in `<video controls>`; **audio**
+  (`.mp3` `.wav` `.ogg` `.m4a` `.flac`) in `<audio controls>`.
+- **Text / code** (`.txt` `.json` `.csv` `.xml` `.yaml`/`.yml` `.toml` `.ini`
+  `.log` `.rst` `.py` `.js` `.ts`/`.tsx` `.c`/`.cpp`/`.h` `.rs` `.go` `.java`
+  `.rb` `.sh` `.bat` `.ps1` and many more) renders in a **client-side
+  HTML-escaped `<pre>`**, so a `<script>` inside a `.txt`/`.json` is shown as
+  text and **never executed**.
+- **`.md` / `.markdown` / `.pdf` / `.svg` are unchanged** — Markdown still uses
+  the GFM/Mermaid renderer, PDF the `<iframe>`, and SVG the existing `<img>`
+  path. **SVG and HTML are intentionally not widened in this increment**: SVG
+  stays on the inert `<img>` path and HTML is *absent from the registry* (a
+  later increment will sandbox HTML/SVG in an `<iframe>`). A `.html` added to
+  `view_ext` is flagged non-renderable (OS-open only), so it can never be
+  injected into the viewer's own origin here.
+
+### Security
+- **`/api/raw` Content-Type hardening.** Every raw response now carries the
+  exact `Content-Type` from the registry **plus `X-Content-Type-Options:
+  nosniff`** (the browser cannot MIME-sniff a text body into something
+  executable) **plus `Content-Disposition: inline`** (display, not auto-download).
+  Text/code and any unknown extension are served as `text/plain` (**never
+  `text/html`, never a sniffable type**), so even a hypothetical sniff bypass
+  cannot make the browser treat them as markup.
+- **Client-side escape for text/code.** The text viewer HTML-escapes the body
+  before inserting it into `<pre>`, so an XSS payload inside a viewed file is
+  inert. This is the primary defence; `nosniff` + `text/plain` is
+  defence-in-depth.
+- **Uniform boundary.** The new types go through the same `_safe_resolve` /
+  pruned-dir / traversal checks, so a media-typed secret inside `.git` /
+  `node_modules`, or reached via traversal, is still **never** served (404).
+
+### Changed
+- The default `view_ext` expands from `.md,.markdown,.pdf,.svg` to the full set
+  of safe content types the registry can render inline. `RENDERABLE_EXT` is now
+  derived from the registry so a viewable type is exactly an inline-renderable
+  one. README updated.
+
+  **Honest caveat (reiterated):** widening the default viewable set means every
+  file with one of those extensions under the root (outside pruned dirs) is
+  readable over HTTP. Point the viewer at a directory you are comfortable serving
+  to a local browser.
+
 ## [0.3.0] - 2026-06-01
 
 ### Added — startup speed
