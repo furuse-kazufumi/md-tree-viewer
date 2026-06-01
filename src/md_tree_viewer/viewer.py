@@ -1248,9 +1248,21 @@ function resolveRel(base, href) {  // base = current doc path (file), href = rel
 }
 
 function pathFromHash() { return decodeURIComponent(location.hash.replace(/^#/, '')); }
-function openByPath(path) {
-  const node = flatFiles.find(f => f.path === path);
-  if (node) { openFile(node, null); }
+// Synthesize a minimal file node from a path so a deep-linked file (one not in the
+// shallow tree) can still be opened directly via /api/file or /api/raw.
+function nodeFromPath(path) {
+  const name = path.split('/').pop();
+  const m = (name.match(/\.([A-Za-z0-9]+)$/) || [,''])[1].toLowerCase();
+  const ext = m === 'pdf' ? 'pdf' : m === 'svg' ? 'svg' : (m === 'md' || m === 'markdown') ? 'md' : 'other';
+  return { path, name, ext, title: name, desc: '', renderable: (ext !== 'other'), mtime: 0 };
+}
+async function openByPath(path) {
+  let node = flatFiles.find(f => f.path === path);
+  if (!node) {                          // deep file not in the shallow tree → consult the full list
+    const all = await ensureFullTree();
+    node = all.find(f => f.path === path);
+  }
+  openFile(node || nodeFromPath(path), null);
 }
 
 // path (e.g. sub/x.md) → GitHub blob URL. null if the repo has no remote.
