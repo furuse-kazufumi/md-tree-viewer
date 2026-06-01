@@ -1204,6 +1204,10 @@ INDEX_HTML = r"""<!DOCTYPE html>
 // back in the X-CSRF-Token header; a custom header forces a CORS pre-flight on
 // cross-origin requests, so a malicious page cannot forge a state-changing POST.
 const CSRF_TOKEN = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+// ext (".png") → renderer kind ("image"/"video"/"audio"/"text"/"md"/"pdf"/"svg"),
+// injected from the server's content-type registry so deep-linked files (ones not
+// in the shallow tree) get the right renderer. Anything absent → "other".
+const CONTENT_KINDS = JSON.parse('__CONTENT_KINDS__');
 function postJSON(url, body) {
   const headers = { 'X-CSRF-Token': CSRF_TOKEN };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
