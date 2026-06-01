@@ -130,7 +130,17 @@ CONFIG_PATH: Path | None = None
 
 # The complete set of keys the config file is allowed to carry. POST bodies are
 # filtered to these keys so an attacker cannot stash arbitrary data in the file.
-CONFIG_KEYS = ("view_ext", "project_icons", "enable_open", "theme")
+CONFIG_KEYS = ("view_ext", "project_icons", "enable_open", "theme", "ignore")
+
+# Extra directory names to skip while scanning, merged with NOISE_DIRS at lookup
+# time. Populated from config `ignore: [...]` (v0.3). Names only (no path
+# separators); compared case-insensitively against each directory component.
+IGNORE_DIRS: frozenset[str] = frozenset()
+
+# Whether the persistent scan cache (~/.md_tree_viewer/cache/<roothash>.json) is
+# used. Disabled with --no-cache. The cache stores a tree snapshot plus per-dir
+# mtimes so startup re-scans only the directories that changed.
+USE_CACHE = True
 
 
 def _config_candidates(root: Path) -> list[Path]:
