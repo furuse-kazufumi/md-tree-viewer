@@ -244,6 +244,43 @@ def _mime_for_ext(ext: str) -> str:
     entry = CONTENT_TYPES.get(ext.lower())
     return entry[1] if entry else _TEXT_MIME
 
+
+# Content types whose body a browser will parse as an active document (and run
+# any embedded <script>) when it is loaded as a TOP-LEVEL navigation — not via an
+# inert <img>/<video>/<audio> tag. SVG is the live case in this increment
+# (image/svg+xml runs embedded <script> on top-level load); any future
+# document-ish type added to the registry should join this set. The viewer never
+# navigates to these top-level (it embeds SVG via <img>), so the only way to hit
+# the executable path is an attacker-driven direct GET of /api/raw — which is an
+# unauthenticated GET with no Host/Origin/CSRF guard. We therefore neutralise
+# script on the raw response itself.
+_SCRIPTABLE_DOC_KINDS = frozenset({"svg"})
+
+# Hardening headers attached to a /api/raw response for a scriptable-document
+# kind. `sandbox` (no allow-scripts token) loads the body in an opaque origin and
+# blocks all script + plugin execution; the CSP `script-src 'none'` is a second,
+# independent control that neutralises embedded <script>/event handlers even on a
+# top-level navigation. Both are inert for the viewer's own <img> render path
+# (an <img>-loaded SVG never runs script and is unaffected by these headers), so
+# this is additive defence-in-depth with no behaviour change for normal viewing.
+_RAW_SVG_CSP = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; sandbox"
+
+
+def _raw_headers_for_ext(ext: str) -> dict[str, str]:
+    """Security headers for a /api/raw response, given the target's (dot-prefixed)
+    extension. Every response gets nosniff + inline disposition (so the browser
+    cannot MIME-sniff a body into executable markup and does not auto-download).
+    A scriptable-document kind (SVG) additionally gets a script-blocking CSP +
+    sandbox so embedded <script> cannot run even on a direct top-level navigation
+    to the raw URL."""
+    headers = {
+        "X-Content-Type-Options": "nosniff",
+        "Content-Disposition": "inline",
+    }
+    if _kind_for_ext(ext) in _SCRIPTABLE_DOC_KINDS:
+        headers["Content-Security-Policy"] = _RAW_SVG_CSP
+    return headers
+
 # Extensions that the OS "open" association would EXECUTE rather than view
 # (ShellExecute on Windows runs these). POST /api/open refuses them so the
 # OS-association feature cannot become a one-click code-execution primitive for a
