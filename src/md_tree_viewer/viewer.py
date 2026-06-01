@@ -1535,6 +1535,12 @@ document.getElementById('iconAddBtn').onclick = () => {
   document.getElementById('iconName').value = ''; document.getElementById('iconEmoji').value = '';
   renderIconList();
 };
+document.getElementById('ignoreAddBtn').onclick = () => {
+  let v = (document.getElementById('ignoreAdd').value || '').trim().toLowerCase();
+  if (!v || v.indexOf('/') >= 0 || v.indexOf('\\') >= 0) return;   // names only
+  if (!draftIgnore.includes(v)) draftIgnore.push(v);
+  document.getElementById('ignoreAdd').value = ''; renderIgnoreList();
+};
 document.getElementById('themeSel').onchange = (e) => {
   const t = e.target.value; try { localStorage.setItem(THEME_KEY, t); } catch(_){}
   applyTheme(t);
