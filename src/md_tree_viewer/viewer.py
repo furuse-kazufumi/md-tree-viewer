@@ -472,6 +472,18 @@ def _save_cache(root: Path, dir_map: dict[str, dict]) -> None:
             return
         payload = {"version": _CACHE_VERSION, "root": str(root), "dirs": dir_map}
         tmp = cpath.with_suffix(".json.tmp")
+        # The .tmp staging file is the actual write target, so it MUST get the
+        # same symlink guard as cpath — otherwise a pre-planted symlink at the
+        # .tmp path would be followed by write_text() and clobber the link
+        # target (TOCTOU twin of the cpath check above). Refuse non-regular
+        # staging files; remove a stale plain tmp so the write is to a fresh
+        # regular file inside the cache dir only.
+        if tmp.is_symlink() or (tmp.exists() and not tmp.is_file()):
+            return
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
         tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
         os.replace(tmp, cpath)
     except OSError:
