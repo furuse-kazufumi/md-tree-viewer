@@ -47,6 +47,18 @@ deny-list, symlinked-config/cache refusal, lazy loading, persistent scan cache).
 - **Uniform boundary.** The new types go through the same `_safe_resolve` /
   pruned-dir / traversal checks, so a media-typed secret inside `.git` /
   `node_modules`, or reached via traversal, is still **never** served (404).
+- **SVG raw-response script neutralisation.** The viewer renders SVG via an inert
+  `<img>`, but `/api/raw?path=*.svg` is a directly reachable GET, and an
+  `image/svg+xml` body run as a *top-level* document executes its embedded
+  `<script>`. The SVG raw response now carries
+  `Content-Security-Policy: default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; sandbox`,
+  so a direct top-level navigation to a planted `.svg` under the root can no
+  longer run script in the viewer's loopback origin (which would otherwise leak
+  the per-process CSRF token and forge `POST /api/config`). The CSP is attached
+  only to scriptable-document kinds (currently SVG); image/video/audio/text/PDF
+  responses are untouched, so the `<img>`/`<video>`/`<audio>`/`<iframe>` render
+  paths and the browser's built-in PDF viewer are unaffected. Additive,
+  read-only, no new write surface.
 
 ### Changed
 - The default `view_ext` expands from `.md,.markdown,.pdf,.svg` to the full set
