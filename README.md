@@ -57,6 +57,8 @@ Then open <http://127.0.0.1:8765/> (opened automatically unless `--no-browser`).
 | `root`          | current directory   | the directory to scan                    |
 | `--port`        | `8765`              | local server port                        |
 | `--no-browser`  | (browser opens)     | do not open a browser automatically      |
+| `--ext`         | `.md,.markdown,.pdf,.svg` | viewable extensions, overriding the config for this run |
+| `--enable-open` | off                 | allow `POST /api/open` to launch non-viewable files with their OS association |
 
 ## Features in detail
 
