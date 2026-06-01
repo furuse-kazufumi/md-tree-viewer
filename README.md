@@ -64,6 +64,7 @@ Then open <http://127.0.0.1:8765/> (opened automatically unless `--no-browser`).
 | `--no-browser`  | (browser opens)     | do not open a browser automatically      |
 | `--ext`         | `.md,.markdown,.pdf,.svg` | viewable extensions, overriding the config for this run |
 | `--enable-open` | off                 | allow `POST /api/open` to launch non-viewable files with their OS association |
+| `--no-cache`    | (cache on)          | disable the persistent scan cache (`~/.md_tree_viewer/cache`); every (re)scan walks the tree fresh |
 
 ## Features in detail
 
