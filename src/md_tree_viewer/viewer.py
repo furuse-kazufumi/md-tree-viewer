@@ -1392,7 +1392,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main(argv: list[str] | None = None) -> int:
-    global ROOT, VIEW_EXT, ENABLE_OPEN, BOUND_PORT
+    global ROOT, VIEW_EXT, ENABLE_OPEN
     ap = argparse.ArgumentParser(
         prog="mdtree",
         description="Local web viewer for Markdown / PDF / SVG files under a directory tree.",
