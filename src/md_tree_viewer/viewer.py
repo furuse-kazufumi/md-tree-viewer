@@ -1427,6 +1427,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    BOUND_PORT = server.server_address[1]   # used by the Host/Origin POST guards
     print(f"Markdown Tree Viewer started: {url}\n  root = {ROOT}\n  stop: Ctrl+C")
     if not args.no_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
