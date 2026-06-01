@@ -1164,7 +1164,7 @@ document.getElementById('saveCfg').onclick = async () => {
     theme: document.getElementById('themeSel').value,
   };
   try {
-    const r = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const r = await postJSON('/api/config', body);
     const j = await r.json().catch(() => ({}));
     if (r.ok && j.ok) {
       fillSettings(j.config);
