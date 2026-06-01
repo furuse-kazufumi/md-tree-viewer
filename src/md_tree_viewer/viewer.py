@@ -982,7 +982,7 @@ async function openFile(node, el) {
     btn.onclick = async () => {
       msg.textContent = 'opening…';
       try {
-        const r = await fetch('/api/open?path=' + encodeURIComponent(node.path), { method: 'POST' });
+        const r = await postJSON('/api/open?path=' + encodeURIComponent(node.path));
         const j = await r.json().catch(() => ({}));
         msg.textContent = r.ok ? 'launched.' : (j.error || ('failed (' + r.status + ')'));
       } catch (e) { msg.textContent = 'request failed'; }
