@@ -1268,8 +1268,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         p = urlparse(self.path)
         if p.path == "/":
-            self._send(200, INDEX_HTML.replace("__ROOT__", str(ROOT)).encode("utf-8"),
-                       "text/html; charset=utf-8")
+            html = INDEX_HTML.replace("__ROOT__", str(ROOT)).replace(
+                "__CSRF_TOKEN__", CSRF_TOKEN)
+            self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
         elif p.path == "/api/config":
             self._send_json(200, config_payload())
         elif p.path == "/api/tree":
