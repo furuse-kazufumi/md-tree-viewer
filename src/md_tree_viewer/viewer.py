@@ -1157,7 +1157,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
           <input id="extAdd" placeholder=".rst" style="width:80px">
           <button id="extAddBtn">Add</button>
         </div>
-        <div class="setnote">md / markdown / pdf / svg render inline; other listed types open with the OS app.</div>
+        <div class="setnote">Markdown, PDF, SVG, images, video, audio and text/code render inline; any other listed type opens with the OS app.</div>
       </div>
       <div class="setgrp">
         <div class="settitle">Project icons</div>
