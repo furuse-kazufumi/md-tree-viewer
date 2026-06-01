@@ -1273,16 +1273,21 @@ function ghUrlForPath(path) {
 }
 function ghUrlForRef(text) { return ghUrlForPath(resolveRel(currentDocPath, text)); }
 
+// The widest file list available right now: the complete tree once it has loaded
+// in the background (kicked off by loadTree), else the shallow startup list.
+function searchPool() { return fullFlatFiles || flatFiles; }
+
 // Resolve whether an md/pdf referenced from the current doc exists locally.
 function resolveDocRef(text) {
   text = text.trim();
   if (!/\.(md|markdown|pdf)$/i.test(text)) return null;
-  let node = flatFiles.find(f => f.path === resolveRel(currentDocPath, text));
+  const pool = searchPool();
+  let node = pool.find(f => f.path === resolveRel(currentDocPath, text));
   if (node) return node;
-  node = flatFiles.find(f => f.path === text);
+  node = pool.find(f => f.path === text);
   if (node) return node;
   const base = text.split('/').pop().toLowerCase();
-  const hits = flatFiles.filter(f => f.name.toLowerCase() === base);
+  const hits = pool.filter(f => f.name.toLowerCase() === base);
   return hits.length === 1 ? hits[0] : null;
 }
 
