@@ -1661,8 +1661,21 @@ class Handler(BaseHTTPRequestHandler):
         elif p.path == "/api/config":
             self._send_json(200, config_payload())
         elif p.path == "/api/tree":
-            force = bool(parse_qs(p.query).get("fresh"))
-            self._send(200, _tree_json(force).encode("utf-8"), "application/json; charset=utf-8")
+            qs = parse_qs(p.query)
+            sub = (qs.get("path") or [None])[0]
+            if sub is not None:
+                # Lazy subtree fetch: the immediate children of one root-confined,
+                # non-pruned directory. Honours the same boundary as _safe_resolve.
+                body = _subtree_json(sub)
+                if body is None:
+                    self._send(404, b"not found or not allowed", "text/plain; charset=utf-8")
+                    return
+                self._send(200, body.encode("utf-8"), "application/json; charset=utf-8")
+            else:
+                force = bool(qs.get("fresh"))
+                full = bool(qs.get("full"))
+                self._send(200, _tree_json(force, full).encode("utf-8"),
+                           "application/json; charset=utf-8")
         elif p.path in ("/api/file", "/api/raw"):
             rel = (parse_qs(p.query).get("path") or [""])[0]
             target = _safe_resolve(rel)
