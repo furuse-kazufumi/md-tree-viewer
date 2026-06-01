@@ -1457,7 +1457,8 @@ function pathFromHash() { return decodeURIComponent(location.hash.replace(/^#/, 
 function nodeFromPath(path) {
   const name = path.split('/').pop();
   const m = (name.match(/\.([A-Za-z0-9]+)$/) || [,''])[1].toLowerCase();
-  const ext = m === 'pdf' ? 'pdf' : m === 'svg' ? 'svg' : (m === 'md' || m === 'markdown') ? 'md' : 'other';
+  // Consult the registry-derived kind map; unknown extensions → "other".
+  const ext = CONTENT_KINDS['.' + m] || 'other';
   return { path, name, ext, title: name, desc: '', renderable: (ext !== 'other'), mtime: 0 };
 }
 async function openByPath(path) {
