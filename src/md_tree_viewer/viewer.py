@@ -491,10 +491,32 @@ def _tree_json(force: bool = False) -> str:
     return _tree_cache["json"]
 
 
+def _in_pruned_dir(target: Path) -> bool:
+    """True if any directory component of `target` (relative to ROOT) is one the
+    tree scan prunes (`.git`, `node_modules`, dotdirs, virtualenvs, …).
+
+    The tree only ever lists files outside these dirs, so the read / open
+    endpoints must enforce the same boundary. Otherwise widening `view_ext` via
+    config would let GET reach secrets the tree hides (e.g. `.git/credentials`,
+    `node_modules/**/.npmrc`), turning tree-pruning — which is NOT a security
+    boundary on its own — into a false sense of one. `target` is assumed already
+    resolved and confined to ROOT by the caller."""
+    try:
+        rel = target.relative_to(ROOT.resolve())
+    except ValueError:
+        return True   # outside root → treat as pruned (defensive; caller also checks)
+    # Every component except the final filename is a directory on the path.
+    for part in rel.parts[:-1]:
+        if _skip_dir(part):
+            return True
+    return False
+
+
 def _safe_resolve(rel: str) -> Path | None:
     """Resolve a request path to an existing file under ROOT whose extension is in
-    the active VIEW_EXT. Returns None on traversal, missing file or bad extension.
-    Used by the read endpoints (/api/file, /api/raw)."""
+    the active VIEW_EXT. Returns None on traversal, missing file, bad extension,
+    or a path inside a pruned/hidden directory. Used by the read endpoints
+    (/api/file, /api/raw)."""
     try:
         target = (ROOT / rel).resolve()
         target.relative_to(ROOT.resolve())
@@ -502,22 +524,30 @@ def _safe_resolve(rel: str) -> Path | None:
         return None
     if not target.is_file() or target.suffix.lower() not in VIEW_EXT:
         return None
+    if _in_pruned_dir(target):
+        return None
     return target
 
 
 def _safe_open_resolve(rel: str) -> Path | None:
-    """Resolve a request path for OS-association launch: confined to ROOT and must
-    be an existing regular file, but NOT limited to VIEW_EXT (the point is to open
-    non-viewable types). No extension filter widens the attack surface beyond
-    'any existing file under root'; combined with ENABLE_OPEN being opt-in and the
-    launcher passing a single path argument (never a shell string), this avoids an
-    arbitrary-command-execution surface."""
+    """Resolve a request path for OS-association launch: confined to ROOT, must be
+    an existing regular file, must NOT live in a pruned/hidden dir, and must NOT
+    have an executable extension. It is intentionally NOT limited to VIEW_EXT (the
+    point is to open non-viewable types), but the executable deny-list keeps the
+    OS association from being abused to *run* code: combined with ENABLE_OPEN being
+    opt-in, the executable deny-list, the pruned-dir check, and the launcher
+    passing a single path argument (never a shell string), this avoids both a
+    shell-injection surface and a one-click ShellExecute code-execution surface."""
     try:
         target = (ROOT / rel).resolve()
         target.relative_to(ROOT.resolve())
     except (ValueError, OSError):
         return None
     if not target.is_file():
+        return None
+    if _in_pruned_dir(target):
+        return None
+    if target.suffix.lower() in EXECUTABLE_EXT:
         return None
     return target
 
