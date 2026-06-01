@@ -1114,6 +1114,8 @@ INDEX_HTML = r"""<!DOCTYPE html>
   #content .doc { max-width:940px; }
   #content img { max-width:100%; }
   #content pre { background:var(--side); padding:12px; border-radius:6px; overflow:auto; }
+  #content pre.textview { white-space:pre; max-height:none; }
+  #content pre.textview code { white-space:pre; word-break:normal; }
   #content code { background:rgba(175,184,193,.2); padding:.15em .35em; border-radius:5px; font-size:85%; }
   #content pre code { background:none; padding:0; }
   #content table { border-collapse:collapse; margin:12px 0; }
