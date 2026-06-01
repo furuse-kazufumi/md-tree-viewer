@@ -139,15 +139,34 @@ endpoints:
 - The server binds to `127.0.0.1` (local only).
 - **Reads** (`GET /api/file`, `/api/raw`): only files **under the root** whose
   extension is in the active `view_ext` are served. Requests are resolved against
-  the root and **path traversal is rejected**.
+  the root and **path traversal is rejected** (symlinks are resolved and
+  re-checked). Files inside pruned/hidden directories (`.git`, `node_modules`,
+  dotdirs, virtualenvs, …) are **never** served, even if you widen `view_ext` to
+  their extension — the read boundary matches what the tree hides, so a config
+  change cannot leak secrets such as `.git/credentials` or `node_modules/**`
+  tokens.
 - **The only write endpoint is `POST /api/config`,** and it writes **exactly one
   file** — the config file described above — and nothing else. The request body
   is sanitised to a fixed set of known keys (`view_ext`, `project_icons`,
   `enable_open`, `theme`); unknown keys and malformed values are dropped, so a
   request cannot stash arbitrary data or influence any other path. There is no
-  endpoint that writes any file you choose.
+  endpoint that writes any file you choose. The write is also refused if the
+  config path is a symlink (it cannot be redirected to an outside file).
 - **`POST /api/open`** does not write files; it launches a root-confined existing
-  file with its OS association and is **off by default** (see above).
+  file with its OS association, refuses executable types, and is **off by
+  default** (see above).
+- **CSRF / origin protection.** Both POST endpoints require a per-process
+  `X-CSRF-Token` header matching a random token embedded in the page. Because a
+  custom header forces a CORS pre-flight, a malicious page open in your browser
+  cannot forge a state-changing request against the loopback server. In addition,
+  the `Host` header must be a loopback literal (DNS-rebinding mitigation) and any
+  `Origin`/`Referer` must be same-origin. All checks fail closed (403).
+
+**Honest caveat on `view_ext`:** widening the viewable extensions means **every
+file with that extension under the root (outside pruned dirs) becomes readable
+over HTTP**. Point the viewer at a directory whose contents you are comfortable
+serving to a local browser, and avoid adding extensions like `.txt`/`.env`/`.pem`
+to a root that mixes documents with secrets.
 
 ## Why
 
