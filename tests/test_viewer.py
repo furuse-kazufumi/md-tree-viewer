@@ -753,6 +753,47 @@ def test_no_cache_does_not_write_cache_file(deep_tree):
     assert not cpath.exists()
 
 
+def test_save_cache_refuses_symlinked_canonical_path(deep_tree, tmp_path):
+    """If the canonical cache file is pre-planted as a symlink to an outside
+    victim, _save_cache refuses to follow it (the victim is untouched)."""
+    victim = tmp_path / "victim_cache.txt"
+    victim.write_text("ORIGINAL", encoding="utf-8")
+    cpath = viewer._cache_path(deep_tree)
+    assert cpath is not None
+    cpath.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        cpath.symlink_to(victim)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not supported in this environment")
+    viewer._save_cache(deep_tree, {"": {"mtime": 0.0, "files": [], "dirs": []}})
+    assert victim.read_text(encoding="utf-8") == "ORIGINAL"
+
+
+def test_save_cache_refuses_symlinked_tmp_staging_file(deep_tree, tmp_path):
+    """Regression (v0.3 verify, low): the .tmp staging file is the real write
+    target, so a symlink pre-planted at the <cache>.json.tmp path must NOT be
+    followed by write_text — otherwise the cpath symlink guard is bypassable via
+    its .tmp twin and the (victim-writable) link target gets clobbered with the
+    fixed cache JSON. The victim must remain ORIGINAL and the canonical cache
+    path must not become a symlink."""
+    victim = tmp_path / "victim_tmp.txt"
+    victim.write_text("ORIGINAL", encoding="utf-8")
+    cpath = viewer._cache_path(deep_tree)
+    assert cpath is not None
+    cpath.parent.mkdir(parents=True, exist_ok=True)
+    tmp_twin = cpath.with_suffix(".json.tmp")
+    try:
+        tmp_twin.symlink_to(victim)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not supported in this environment")
+    viewer._save_cache(deep_tree, {"": {"mtime": 0.0, "files": [], "dirs": []}})
+    # The link target was NOT overwritten with cache bytes.
+    assert victim.read_text(encoding="utf-8") == "ORIGINAL"
+    # And os.replace did not turn the canonical cache path into a symlink/file
+    # backed by the victim (i.e. no redirect of the only write target).
+    assert not cpath.is_symlink()
+
+
 def test_cache_signature_changes_with_view_ext(deep_tree, monkeypatch):
     """The cache file name embeds the scan signature (view_ext + ignore) so a
     config change does not serve a tree built under a different config."""
