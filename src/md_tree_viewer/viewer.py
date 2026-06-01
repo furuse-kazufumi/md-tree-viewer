@@ -1983,8 +1983,15 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         p = urlparse(self.path)
         if p.path == "/":
-            html = INDEX_HTML.replace("__ROOT__", str(ROOT)).replace(
-                "__CSRF_TOKEN__", CSRF_TOKEN)
+            # The content-kind map ({".png":"image", ...}) is injected as a JSON
+            # string so the client can resolve a deep-linked file's renderer even
+            # when it is not present in the shallow tree. json.dumps escapes it
+            # safely; the single-quote wrapper in the page parses it via JSON.parse.
+            kinds = json.dumps({ext: kind for ext, (kind, _m) in CONTENT_TYPES.items()})
+            html = (INDEX_HTML
+                    .replace("__ROOT__", str(ROOT))
+                    .replace("__CSRF_TOKEN__", CSRF_TOKEN)
+                    .replace("__CONTENT_KINDS__", kinds.replace("\\", "\\\\").replace("'", "\\'")))
             self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
         elif p.path == "/api/config":
             self._send_json(200, config_payload())
