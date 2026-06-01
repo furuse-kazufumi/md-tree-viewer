@@ -1,13 +1,13 @@
 # md-tree-viewer
 
-A local, **read-only web viewer** for the Markdown / PDF / SVG files in a
+A local, **mostly read-only web viewer** for the Markdown / PDF / SVG files in a
 directory tree. Point it at a folder full of docs and browse them by
 **title + opening description** instead of by filename alone.
 
-- **Left pane** — a collapsible tree of just the `.md` / `.markdown` / `.pdf` /
-  `.svg` files under the root, with a live search filter. Each Markdown file
-  shows its title and a one-line description so you can tell files apart at a
-  glance.
+- **Left pane** — a collapsible tree of just the viewable files under the root
+  (`.md` / `.markdown` / `.pdf` / `.svg` by default), with a live search filter
+  and a **settings panel** (⚙️). Each Markdown file shows its title and a
+  one-line description so you can tell files apart at a glance.
 - **Right pane** — the selected file rendered:
   - Markdown with GitHub-flavored tables, code, **Mermaid** diagrams, and CJK text
   - PDF embedded in the page
