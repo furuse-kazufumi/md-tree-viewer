@@ -1,22 +1,28 @@
 # -*- coding: utf-8 -*-
-"""md_tree_viewer — a local, read-only web viewer that lists the Markdown / PDF /
-SVG files under a directory tree and renders the selected one.
+"""md_tree_viewer — a local, mostly read-only web viewer that lists the Markdown /
+PDF / SVG files under a directory tree and renders the selected one.
 
 Usage:
     mdtree                      # scan the current directory, port 8765, open browser
     mdtree path/to/dir
     mdtree --port 9000 --no-browser
+    mdtree --ext ".md,.rst"     # override the viewable extensions
+    mdtree --enable-open        # allow OS-association launch of non-viewable files
 
 Features:
-- Left pane: a collapsible tree of just the .md/.markdown/.pdf/.svg files under
-  the root (with a search filter).
+- Left pane: a collapsible tree of just the viewable files under the root (with a
+  search filter) plus a settings panel.
 - Each .md shows its title + opening description (so the filename alone is not
   the only clue to its content).
 - Right pane: .md is rendered (GFM tables/code/Mermaid), .pdf is embedded, .svg
   is shown as an image.
 - Dependency dirs, virtualenvs and .git are skipped while scanning (fast, no noise).
-- Read-only. Only .md/.markdown/.pdf/.svg under the root are served (path
-  traversal is prevented).
+- Settings (viewable extensions, per-project icons, theme, enable-open) persist to
+  a single config file (``<root>/.mdtree.json`` or ``~/.md_tree_viewer.json``).
+- Mostly read-only. GET serves only viewable files under the root (path traversal
+  is prevented). The ONLY write endpoint, POST /api/config, writes that one config
+  file and nothing else. POST /api/open launches a root-confined file with its OS
+  association, and is disabled by default (opt-in via --enable-open / config).
 - Dependencies: Python standard library only (rendering uses marked.js +
   mermaid.js loaded from a CDN).
 """
@@ -24,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import subprocess
