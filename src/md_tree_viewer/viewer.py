@@ -988,6 +988,15 @@ INDEX_HTML = r"""<!DOCTYPE html>
         </div>
       </div>
       <div class="setgrp">
+        <div class="settitle">Ignore directories</div>
+        <div id="ignoreList"></div>
+        <div class="setrow">
+          <input id="ignoreAdd" placeholder="folder name" style="width:110px">
+          <button id="ignoreAddBtn">Add</button>
+        </div>
+        <div class="setnote">Extra directory names skipped while scanning (on top of .git / node_modules / caches). Names only, no slashes.</div>
+      </div>
+      <div class="setgrp">
         <div class="setrow"><label><input type="checkbox" id="enableOpen"> Allow OS-association open</label></div>
         <div class="setnote" id="openNote">When off, the server returns 403 for open requests. Server may still force this off.</div>
       </div>
