@@ -75,7 +75,162 @@ NOISE_DIRS = {
     ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", "dist", "build", ".idea",
     ".vscode", "site-packages", "target", ".cache", ".eggs", ".next", ".gradle", "htmlcov",
 }
-VIEW_EXT = (".md", ".markdown", ".pdf", ".svg")
+
+# Default viewable extensions. The active set lives in VIEW_EXT, which the config
+# file and the --ext CLI flag may override at startup (see load_config / main).
+DEFAULT_VIEW_EXT = (".md", ".markdown", ".pdf", ".svg")
+VIEW_EXT: tuple[str, ...] = DEFAULT_VIEW_EXT
+
+# Extensions that the viewer renders inline (everything else, even if listed in
+# VIEW_EXT, is "non-viewable" and can only be opened via OS association).
+RENDERABLE_EXT = (".md", ".markdown", ".pdf", ".svg")
+
+# Per-project (top-level dir) emoji icons baked into a distribution. The OSS
+# package ships an EMPTY map so it never hard-codes anyone's project names; a
+# private/local build may seed this with its own defaults. config.project_icons
+# always takes precedence, and an unset project falls back to a colour dot.
+REPO_ICON: dict[str, str] = {}
+
+# Whether POST /api/open (OS-association launch of non-viewable files) is allowed.
+# Default OFF for the OSS package; enabled only via --enable-open or config.
+ENABLE_OPEN = False
+
+# Active config (in memory). Mirrors the on-disk config file 1:1.
+CONFIG: dict = {}
+# Resolved path of the single config file this process reads/writes (set by
+# load_config). The ONLY path POST /api/config is ever allowed to write.
+CONFIG_PATH: Path | None = None
+
+# The complete set of keys the config file is allowed to carry. POST bodies are
+# filtered to these keys so an attacker cannot stash arbitrary data in the file.
+CONFIG_KEYS = ("view_ext", "project_icons", "enable_open", "theme")
+
+
+def _config_candidates(root: Path) -> list[Path]:
+    """Config search/write order: <root>/.mdtree.json first, then the per-user
+    ~/.md_tree_viewer.json. These are the ONLY two locations ever touched."""
+    cands = [root / ".mdtree.json"]
+    try:
+        cands.append(Path.home() / ".md_tree_viewer.json")
+    except (RuntimeError, OSError):
+        pass
+    return cands
+
+
+def _normalise_ext_list(value) -> list[str]:
+    """Coerce an extension list/string into a clean list of '.ext' tokens
+    (lower-cased, dot-prefixed, de-duplicated, order preserved)."""
+    if isinstance(value, str):
+        items = re.split(r"[,\s]+", value)
+    elif isinstance(value, (list, tuple)):
+        items = value
+    else:
+        return []
+    out: list[str] = []
+    for it in items:
+        e = str(it).strip().lower()
+        if not e:
+            continue
+        if not e.startswith("."):
+            e = "." + e
+        if e not in out:
+            out.append(e)
+    return out
+
+
+def _coerce_config(raw: dict) -> dict:
+    """Validate/sanitise a config dict, keeping only known keys with the right
+    shapes. Unknown keys and malformed values are dropped (fail-closed)."""
+    cfg: dict = {}
+    if not isinstance(raw, dict):
+        return cfg
+    ext = _normalise_ext_list(raw.get("view_ext"))
+    if ext:
+        cfg["view_ext"] = ext
+    icons = raw.get("project_icons")
+    if isinstance(icons, dict):
+        cfg["project_icons"] = {
+            str(k): str(v) for k, v in icons.items() if str(k).strip() and str(v).strip()
+        }
+    if isinstance(raw.get("enable_open"), bool):
+        cfg["enable_open"] = raw["enable_open"]
+    theme = raw.get("theme")
+    if isinstance(theme, str) and theme in ("light", "dark"):
+        cfg["theme"] = theme
+    return cfg
+
+
+def _read_config_file() -> dict:
+    """Read CONFIG_PATH if it exists; return a sanitised dict (empty on any
+    error or absence — fail-safe, never raises)."""
+    if CONFIG_PATH is None or not CONFIG_PATH.is_file():
+        return {}
+    try:
+        return _coerce_config(json.loads(CONFIG_PATH.read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        return {}
+
+
+def _write_config_file(cfg: dict) -> None:
+    """Write the sanitised config to CONFIG_PATH (the single permitted write
+    target). Raises OSError on failure; callers map that to a 500."""
+    if CONFIG_PATH is None:
+        raise OSError("config path not initialised")
+    CONFIG_PATH.write_text(
+        json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+
+
+def _apply_config(cfg: dict) -> None:
+    """Apply a sanitised config to the in-memory globals (VIEW_EXT, REPO_ICON
+    precedence is resolved at lookup time, ENABLE_OPEN)."""
+    global VIEW_EXT, ENABLE_OPEN, CONFIG
+    CONFIG = cfg
+    ext = cfg.get("view_ext")
+    VIEW_EXT = tuple(ext) if ext else DEFAULT_VIEW_EXT
+    if "enable_open" in cfg:
+        ENABLE_OPEN = bool(cfg["enable_open"])
+
+
+def load_config(root: Path) -> dict:
+    """Locate and load the config file for this root, set CONFIG_PATH to the
+    file that will be read/written, and apply it to the globals. The first
+    existing candidate is used for reads; if none exists, the first candidate
+    (``<root>/.mdtree.json``) is where a future POST will write."""
+    global CONFIG_PATH
+    cands = _config_candidates(root)
+    CONFIG_PATH = cands[0]
+    for c in cands:
+        if c.is_file():
+            CONFIG_PATH = c
+            break
+    cfg = _read_config_file()
+    _apply_config(cfg)
+    return cfg
+
+
+def project_icon(name: str) -> str:
+    """Resolve the emoji icon for a top-level project dir: config.project_icons
+    first, then the baked-in REPO_ICON default, else '' (client uses a colour
+    dot fallback)."""
+    icons = CONFIG.get("project_icons") or {}
+    if name in icons:
+        return icons[name]
+    return REPO_ICON.get(name, "")
+
+
+def config_payload() -> dict:
+    """The config object served by GET /api/config and consumed by the UI. Always
+    reports the effective view_ext / enable_open even when the file is sparse."""
+    return {
+        "view_ext": list(VIEW_EXT),
+        "project_icons": dict(CONFIG.get("project_icons") or REPO_ICON),
+        "enable_open": bool(ENABLE_OPEN),
+        "theme": CONFIG.get("theme", "light"),
+        "default_view_ext": list(DEFAULT_VIEW_EXT),
+        "renderable_ext": list(RENDERABLE_EXT),
+        "config_path": str(CONFIG_PATH) if CONFIG_PATH else "",
+    }
 
 
 def _skip_dir(name: str) -> bool:
