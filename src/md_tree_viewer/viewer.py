@@ -611,7 +611,6 @@ def _build_tree(root: Path, max_depth: int | None = None,
         returned."""
         files, child_dirs = scan(rel)
         children: list[dict] = []
-        has_deeper = False
         truncate = max_depth is not None and depth >= max_depth
         for d in child_dirs:
             child_rel = d if rel == "" else f"{rel}/{d}"
@@ -628,7 +627,6 @@ def _build_tree(root: Path, max_depth: int | None = None,
                         "name": d, "type": "dir", "children": [],
                         "lazy": True, "mtime": cm,
                     })
-                    has_deeper = True
                 continue
             child_node = build(child_rel, depth + 1)
             if child_node is not None:
