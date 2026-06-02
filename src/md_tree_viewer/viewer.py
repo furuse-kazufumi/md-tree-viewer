@@ -1425,7 +1425,7 @@ function renderRecent() {
   // Prefer the complete file list once it has loaded so the "recently modified"
   // section reflects the whole tree, not just the shallow startup levels.
   const pool = fullFlatFiles || flatFiles;
-  const mod = pool.filter(f => f.mtime).slice().sort((a, b) => b.mtime - a.mtime).slice(0, 8);
+  const mod = pool.filter(f => f.mtime).slice().sort((a, b) => b.mtime - a.mtime).slice(0, 100);
   if (mod.length) {
     recentWrap.appendChild(makeSpecialSection('::recent_modified', '✨ Recently modified',
       mod.map(n => ({ node: n, when: timeago(n.mtime) }))));
