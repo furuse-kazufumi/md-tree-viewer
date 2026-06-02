@@ -4,6 +4,37 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-06-02
+
+### Added — MS-Office (and OpenDocument) files in the listing, opened via OS association
+
+Word / Excel / PowerPoint / Visio / OneNote / OpenDocument extensions (`.doc`
+`.docx` `.docm` `.dot` `.dotx` `.rtf` `.xls` `.xlsx` `.xlsm` `.xlsb` `.xlt`
+`.xltx` `.ppt` `.pptx` `.pptm` `.pps` `.ppsx` `.pot` `.potx` `.vsd` `.vsdx`
+`.one` `.odt` `.ods` `.odp`) now appear in the tree. They are **not rendered
+inline** (registry kind `other`); selecting one shows an *"Open with the default
+app ↗"* button that POSTs `/api/open`, launching the file with its OS file
+association (Word/Excel/PowerPoint), exactly like Explorer. They are deliberately
+**not** on the `EXECUTABLE_EXT` deny-list, so the OS hands them to their
+application and never ShellExecutes them as code. Opening still requires the
+server be started with `--enable-open` (the bundled `open_md_tree.cmd` launcher
+now passes it).
+
+### Changed
+
+- **Recent lists show up to 100 entries** (was 30 "Recently opened" / 8 "Recently
+  modified"). The client-side MRU cap for "Recently opened" was raised 40 → 100 so
+  the larger display is backed by stored history. "Recently modified" reflects the
+  full tree (loaded at startup), so it now lists up to 100 most-recently-modified
+  files across all scanned directories.
+
+### Security
+
+- The new Office/ODF types are `kind: "other"` (OS-open only), never inline-rendered
+  and never added to the inline/scriptable render paths. They remain gated by the
+  existing `--enable-open` flag and the unchanged `EXECUTABLE_EXT` deny-list, so no
+  new inline-render or active-document surface is introduced.
+
 ## [0.4.0] - 2026-06-02
 
 ### Added — safe inline rendering of more content types
