@@ -1272,7 +1272,7 @@ const contentEl = document.getElementById('content');
 const countEl = document.getElementById('count');
 const filterEl = document.getElementById('filter');
 let activeEl = null, treeData = null, flatFiles = [], recentWrap = null, projWrap = null, resultsEl = null;
-const RECENT_KEY = 'mdv_recent_v1', RECENT_MAX = 40;
+const RECENT_KEY = 'mdv_recent_v1', RECENT_MAX = 100;
 const OPEN_KEY = 'mdv_open_dirs_v1', CR_KEY = 'mdv_collapsed_recent_v1';
 function loadSet(k){ try { return new Set(JSON.parse(localStorage.getItem(k))||[]); } catch(e){ return new Set(); } }
 function saveSet(k, s){ localStorage.setItem(k, JSON.stringify([...s])); }
