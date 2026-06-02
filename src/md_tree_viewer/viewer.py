@@ -208,6 +208,36 @@ CONTENT_TYPES: dict[str, tuple[str, str]] = {
     ".gitignore": ("text", _TEXT_MIME),
     ".diff": ("text", _TEXT_MIME),
     ".patch": ("text", _TEXT_MIME),
+    # MS-Office / OpenDocument — LISTED but rendered as kind "other" (not inline):
+    # clicking offers "Open with the default app" -> POST /api/open -> os.startfile,
+    # i.e. the OS file association (Word / Excel / PowerPoint), exactly like Explorer.
+    # They are NOT in EXECUTABLE_EXT, so the OS hands them to their app and never
+    # ShellExecutes them as code. (Requires the server started with --enable-open.)
+    ".doc": ("other", "application/msword"),
+    ".docx": ("other", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    ".docm": ("other", "application/vnd.ms-word.document.macroEnabled.12"),
+    ".dot": ("other", "application/msword"),
+    ".dotx": ("other", "application/vnd.openxmlformats-officedocument.wordprocessingml.template"),
+    ".rtf": ("other", "application/rtf"),
+    ".xls": ("other", "application/vnd.ms-excel"),
+    ".xlsx": ("other", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    ".xlsm": ("other", "application/vnd.ms-excel.sheet.macroEnabled.12"),
+    ".xlsb": ("other", "application/vnd.ms-excel.sheet.binary.macroEnabled.12"),
+    ".xlt": ("other", "application/vnd.ms-excel"),
+    ".xltx": ("other", "application/vnd.openxmlformats-officedocument.spreadsheetml.template"),
+    ".ppt": ("other", "application/vnd.ms-powerpoint"),
+    ".pptx": ("other", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+    ".pptm": ("other", "application/vnd.ms-powerpoint.presentation.macroEnabled.12"),
+    ".pps": ("other", "application/vnd.ms-powerpoint"),
+    ".ppsx": ("other", "application/vnd.openxmlformats-officedocument.presentationml.slideshow"),
+    ".pot": ("other", "application/vnd.ms-powerpoint"),
+    ".potx": ("other", "application/vnd.openxmlformats-officedocument.presentationml.template"),
+    ".vsd": ("other", "application/vnd.visio"),
+    ".vsdx": ("other", "application/vnd.ms-visio.drawing"),
+    ".one": ("other", "application/onenote"),
+    ".odt": ("other", "application/vnd.oasis.opendocument.text"),
+    ".ods": ("other", "application/vnd.oasis.opendocument.spreadsheet"),
+    ".odp": ("other", "application/vnd.oasis.opendocument.presentation"),
 }
 
 # The kinds the viewer renders inline (so a file of this kind is `renderable`).
