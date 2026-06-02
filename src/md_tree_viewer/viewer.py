@@ -1420,7 +1420,7 @@ function renderRecent() {
   const rec = getRecent();
   if (rec.length) {
     recentWrap.appendChild(makeSpecialSection('::recent_opened', '🕘 Recently opened',
-      rec.slice(0, 30).map(n => ({ node: n, when: timeago(n.ts) }))));
+      rec.slice(0, 100).map(n => ({ node: n, when: timeago(n.ts) }))));
   }
   // Prefer the complete file list once it has loaded so the "recently modified"
   // section reflects the whole tree, not just the shallow startup levels.
