@@ -465,6 +465,34 @@ def _normalise_ignore_list(value) -> list[str]:
     return out
 
 
+def _read_mdtreeignore(root: Path) -> list[str]:
+    """Read ``<root>/.mdtreeignore`` and return its directory names (lowest-
+    precedence user ignore source, above the built-in NOISE_DIRS).
+
+    Format is gitignore-flavoured but intentionally restricted to bare directory
+    names: one name per line, blank lines and ``#`` comments skipped, inline
+    trailing comments NOT supported (a ``#`` only starts a comment at the line
+    start so a name can contain ``#`` if ever needed). Every name goes through
+    ``_normalise_ignore_list``, so any token with a path separator or ``..`` is
+    dropped — the file can only ever *exclude* directories, never become a path
+    primitive. Fail-safe: returns ``[]`` on any read error or absence (never
+    raises), so a missing/garbled file simply contributes nothing."""
+    path = root / MDTREEIGNORE_NAME
+    try:
+        if not path.is_file():
+            return []
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    names: list[str] = []
+    for line in text.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        names.append(s)
+    return _normalise_ignore_list(names)
+
+
 def _read_config_file() -> dict:
     """Read CONFIG_PATH if it exists; return a sanitised dict (empty on any
     error or absence — fail-safe, never raises)."""
