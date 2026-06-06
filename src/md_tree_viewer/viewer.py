@@ -532,16 +532,37 @@ def _write_config_file(cfg: dict) -> None:
     )
 
 
+def _resolve_ignore_dirs(cfg: dict) -> frozenset[str]:
+    """Compute the EFFECTIVE extra-ignore set (on top of the built-in NOISE_DIRS)
+    by merging the three user sources in precedence order:
+
+        --ignore CLI flag  >  config `ignore: [...]`  >  <root>/.mdtreeignore
+
+    All three only add names to skip, so the result is their union; the ordering
+    is preserved as documentation of precedence and so config_payload can report
+    a stable, de-duplicated list. The built-in NOISE_DIRS is applied separately
+    in _skip_dir and is not part of this set (a user source cannot un-skip it)."""
+    merged: list[str] = []
+    for source in (CLI_IGNORE, tuple(cfg.get("ignore") or ()), FILE_IGNORE):
+        for name in source:
+            if name not in merged:
+                merged.append(name)
+    return frozenset(merged)
+
+
 def _apply_config(cfg: dict) -> None:
     """Apply a sanitised config to the in-memory globals (VIEW_EXT, REPO_ICON
-    precedence is resolved at lookup time, ENABLE_OPEN)."""
+    precedence is resolved at lookup time, ENABLE_OPEN). The effective ignore set
+    layers the CLI flag and the <root>/.mdtreeignore file on top of the config's
+    own `ignore`, so a POST /api/config that rewrites only the config `ignore`
+    still keeps the CLI/file sources in force."""
     global VIEW_EXT, ENABLE_OPEN, CONFIG, IGNORE_DIRS
     CONFIG = cfg
     ext = cfg.get("view_ext")
     VIEW_EXT = tuple(ext) if ext else DEFAULT_VIEW_EXT
     if "enable_open" in cfg:
         ENABLE_OPEN = bool(cfg["enable_open"])
-    IGNORE_DIRS = frozenset(cfg.get("ignore") or ())
+    IGNORE_DIRS = _resolve_ignore_dirs(cfg)
 
 
 def load_config(root: Path) -> dict:
