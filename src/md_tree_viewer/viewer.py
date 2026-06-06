@@ -2209,6 +2209,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-cache", action="store_true",
                     help="disable the persistent scan cache (~/.md_tree_viewer/cache); "
                          "every (re)scan walks the tree fresh")
+    ap.add_argument("--ignore", default=None, metavar='"name1,name2"',
+                    help="comma/space-separated extra directory NAMES to skip while "
+                         "scanning, highest precedence (over config `ignore` and "
+                         "<root>/.mdtreeignore); names only, added on top of the "
+                         "built-in skip list")
     args = ap.parse_args(argv)
 
     ROOT = Path(args.root).resolve()
@@ -2216,8 +2221,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[ERROR] root not found: {ROOT}", file=sys.stderr)
         return 1
 
-    # Load the on-disk config (sets VIEW_EXT / ENABLE_OPEN / project_icons), then
-    # let CLI flags override it for this run (they do not rewrite the file).
+    # Highest-precedence ignore source: must be set BEFORE load_config so its
+    # _apply_config folds the CLI names into the effective IGNORE_DIRS.
+    if args.ignore is not None:
+        CLI_IGNORE = tuple(_normalise_ignore_list(args.ignore))
+
+    # Load the on-disk config (sets VIEW_EXT / ENABLE_OPEN / project_icons) and
+    # the <root>/.mdtreeignore file, then let CLI flags override for this run
+    # (they do not rewrite the file).
     load_config(ROOT)
     if args.ext is not None:
         ext = _normalise_ext_list(args.ext)
