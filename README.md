@@ -68,6 +68,7 @@ Then open <http://127.0.0.1:8765/> (opened automatically unless `--no-browser`).
 | `--port`        | `8765`              | local server port                        |
 | `--no-browser`  | (browser opens)     | do not open a browser automatically      |
 | `--ext`         | all safe content types (md/pdf/svg + images/video/audio/text+code) | viewable extensions, overriding the config for this run |
+| `--ignore`      | (none)              | comma/space-separated extra directory **names** to skip while scanning; highest precedence (over config `ignore` and `<root>/.mdtreeignore`), layered on the built-in skip list |
 | `--enable-open` | off                 | allow `POST /api/open` to launch non-viewable files with their OS association |
 | `--no-cache`    | (cache on)          | disable the persistent scan cache (`~/.md_tree_viewer/cache`); every (re)scan walks the tree fresh |
 
