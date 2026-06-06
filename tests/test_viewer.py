@@ -59,6 +59,10 @@ def sample_tree(tmp_path, monkeypatch):
     # cache dir lives OUTSIDE the scanned root (a sibling) so writing it does not
     # perturb the root's mtime or appear in the tree.
     monkeypatch.setattr(viewer, "IGNORE_DIRS", frozenset())
+    # v0.6: the ignore set now layers three sources (CLI > config > .mdtreeignore);
+    # reset the CLI and file sources too so tests stay isolated.
+    monkeypatch.setattr(viewer, "CLI_IGNORE", ())
+    monkeypatch.setattr(viewer, "FILE_IGNORE", ())
     cache_dir = tmp_path.parent / (tmp_path.name + "_cache")
     monkeypatch.setattr(viewer, "_cache_dir", lambda: cache_dir)
     viewer._reset_tree_cache()
