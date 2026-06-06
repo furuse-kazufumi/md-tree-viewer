@@ -570,13 +570,16 @@ def load_config(root: Path) -> dict:
     file that will be read/written, and apply it to the globals. The first
     existing candidate is used for reads; if none exists, the first candidate
     (``<root>/.mdtree.json``) is where a future POST will write."""
-    global CONFIG_PATH
+    global CONFIG_PATH, FILE_IGNORE
     cands = _config_candidates(root)
     CONFIG_PATH = cands[0]
     for c in cands:
         if c.is_file():
             CONFIG_PATH = c
             break
+    # Resolve the file-based ignore source once for this root (lowest-precedence
+    # user source). Held in FILE_IGNORE so it survives config POSTs.
+    FILE_IGNORE = tuple(_read_mdtreeignore(root))
     cfg = _read_config_file()
     _apply_config(cfg)
     return cfg
