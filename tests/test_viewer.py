@@ -616,6 +616,107 @@ def test_ignore_round_trips_through_config_post(sample_tree):
         server.server_close()
 
 
+# --------------------------------------------------------------------------- #
+# v0.6: three-source ignore externalisation — .mdtreeignore file + --ignore CLI
+# flag, layered on config `ignore` and the built-in NOISE_DIRS, with precedence
+# CLI > config > .mdtreeignore > built-in.
+# --------------------------------------------------------------------------- #
+
+def test_read_mdtreeignore_parses_names_and_skips_comments(tmp_path):
+    """`.mdtreeignore` reads one bare dir name per line; blanks and `#` comments
+    are skipped and path-bearing tokens are dropped (same safety as config)."""
+    (tmp_path / viewer.MDTREEIGNORE_NAME).write_text(
+        "# a comment\n\nBuild\n  tmp  \n../etc\na/b\nBuild\n", encoding="utf-8"
+    )
+    names = viewer._read_mdtreeignore(tmp_path)
+    assert names == ["build", "tmp"]          # lower-cased, de-duped, path tokens dropped
+
+
+def test_read_mdtreeignore_missing_file_is_empty(tmp_path):
+    """A missing/absent .mdtreeignore contributes nothing (fail-safe, no raise)."""
+    assert viewer._read_mdtreeignore(tmp_path) == []
+
+
+def test_load_config_reads_mdtreeignore_into_effective_ignore(tmp_path, monkeypatch):
+    """load_config picks up <root>/.mdtreeignore and folds it into IGNORE_DIRS,
+    even with no config file present."""
+    monkeypatch.setattr(viewer, "ROOT", tmp_path)
+    monkeypatch.setattr(viewer, "CONFIG", {})
+    monkeypatch.setattr(viewer, "CONFIG_PATH", None)
+    monkeypatch.setattr(viewer, "CLI_IGNORE", ())
+    monkeypatch.setattr(viewer, "FILE_IGNORE", ())
+    monkeypatch.setattr(viewer, "IGNORE_DIRS", frozenset())
+    (tmp_path / viewer.MDTREEIGNORE_NAME).write_text("vendor\nfixtures\n", encoding="utf-8")
+    viewer.load_config(tmp_path)
+    assert viewer.FILE_IGNORE == ("vendor", "fixtures")
+    assert viewer.IGNORE_DIRS == frozenset({"vendor", "fixtures"})
+    assert viewer._skip_dir("vendor") and viewer._skip_dir("fixtures")
+
+
+def test_ignore_precedence_cli_over_config_over_file(monkeypatch):
+    """All three sources contribute to the effective set (union); the source
+    breakdown reported by config_payload records each one separately. Precedence
+    is documented by ordering — a higher source may re-state a name but every
+    source only ever adds, so the merged set is their union."""
+    monkeypatch.setattr(viewer, "CLI_IGNORE", ("fromcli", "shared"))
+    monkeypatch.setattr(viewer, "FILE_IGNORE", ("fromfile", "shared"))
+    cfg = {"ignore": ["fromconfig", "shared"]}
+    merged = viewer._resolve_ignore_dirs(cfg)
+    assert merged == frozenset({"fromcli", "fromconfig", "fromfile", "shared"})
+    # First-seen ordering follows precedence: CLI names come first.
+    ordered = list(viewer._resolve_ignore_dirs(cfg))  # set, but built CLI→config→file
+    assert "fromcli" in ordered and "fromfile" in ordered
+
+
+def test_config_payload_reports_ignore_sources(sample_tree, monkeypatch):
+    """GET /api/config exposes a per-source ignore breakdown so the UI can show
+    where each name came from and which ones it can edit."""
+    monkeypatch.setattr(viewer, "CLI_IGNORE", ("clidir",))
+    monkeypatch.setattr(viewer, "FILE_IGNORE", ("filedir",))
+    monkeypatch.setattr(viewer, "CONFIG", {"ignore": ["confdir"]})
+    monkeypatch.setattr(viewer, "IGNORE_DIRS",
+                        viewer._resolve_ignore_dirs(viewer.CONFIG))
+    payload = viewer.config_payload()
+    assert payload["ignore_sources"]["cli"] == ["clidir"]
+    assert payload["ignore_sources"]["config"] == ["confdir"]
+    assert payload["ignore_sources"]["file"] == ["filedir"]
+    assert "node_modules" in payload["ignore_sources"]["builtin"]
+    assert set(payload["ignore"]) == {"clidir", "confdir", "filedir"}
+
+
+def test_config_post_keeps_cli_and_file_ignore_sources(sample_tree, monkeypatch):
+    """A POST /api/config rewrites only the config `ignore`; the CLI flag and the
+    .mdtreeignore file sources must keep applying (they overlay, not get erased)."""
+    monkeypatch.setattr(viewer, "CLI_IGNORE", ("clidir",))
+    monkeypatch.setattr(viewer, "FILE_IGNORE", ("filedir",))
+    # Re-apply with the persistent sources so the global reflects startup state.
+    viewer._apply_config({})
+    assert viewer.IGNORE_DIRS == frozenset({"clidir", "filedir"})
+    server, port = _serve(sample_tree)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        status, j = _post(base + "/api/config", {"ignore": ["confdir"]})
+        assert status == 200 and j["ok"] is True
+        # The effective set still carries the CLI + file sources after the write.
+        assert set(j["config"]["ignore"]) == {"clidir", "confdir", "filedir"}
+        assert viewer.IGNORE_DIRS == frozenset({"clidir", "confdir", "filedir"})
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_cli_ignore_excludes_dir_from_tree(deep_tree, monkeypatch):
+    """A directory named via the (simulated) --ignore CLI source is skipped while
+    scanning, exactly like config `ignore` and the built-in NOISE_DIRS."""
+    monkeypatch.setattr(viewer, "CLI_IGNORE", ("skipme",))
+    monkeypatch.setattr(viewer, "IGNORE_DIRS", viewer._resolve_ignore_dirs({}))
+    viewer._reset_tree_cache()
+    assert viewer._skip_dir("skipme")
+    blob = json.dumps(viewer._build_tree(deep_tree, use_cache=False))
+    assert "noted.md" not in blob
+    assert viewer._safe_resolve("skipme/noted.md") is None
+
+
 def test_shallow_build_emits_lazy_stub_for_deep_dirs(deep_tree):
     """With max_depth=SHALLOW_DEPTH (=2), the top 2 directory levels are walked and
     anything deeper arrives as a lazy stub (empty children, lazy=True), so startup
