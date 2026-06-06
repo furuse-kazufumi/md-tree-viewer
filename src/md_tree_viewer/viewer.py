@@ -357,9 +357,25 @@ CONFIG_PATH: Path | None = None
 CONFIG_KEYS = ("view_ext", "project_icons", "enable_open", "theme", "ignore")
 
 # Extra directory names to skip while scanning, merged with NOISE_DIRS at lookup
-# time. Populated from config `ignore: [...]` (v0.3). Names only (no path
-# separators); compared case-insensitively against each directory component.
+# time. This is the EFFECTIVE set actually used by _skip_dir; it is the union of
+# three user-supplied sources resolved at startup (v0.6):
+#   --ignore CLI flag  >  config `ignore: [...]`  >  <root>/.mdtreeignore file
+# layered on top of the built-in NOISE_DIRS default (which always applies). All
+# three sources only ever ADD directory NAMES to skip (names only, no path
+# separators), so "precedence" here means which sources contribute; a
+# higher-precedence source can re-state a name but cannot un-skip a built-in.
+# Names are compared case-insensitively against each directory component.
 IGNORE_DIRS: frozenset[str] = frozenset()
+
+# Extra ignore names supplied on the command line via --ignore. Held separately
+# from CONFIG so it overlays (does not rewrite) the on-disk config, mirroring how
+# --ext overlays view_ext for the run only. Empty when the flag is unused.
+CLI_IGNORE: tuple[str, ...] = ()
+
+# The name of the per-root ignore file (gitignore-style: one bare directory name
+# per line, ``#`` comments and blanks ignored). Lives at ``<root>/.mdtreeignore``
+# and is the lowest-precedence user source above the built-in NOISE_DIRS.
+MDTREEIGNORE_NAME = ".mdtreeignore"
 
 # Whether the persistent scan cache (~/.md_tree_viewer/cache/<roothash>.json) is
 # used. Disabled with --no-cache. The cache stores a tree snapshot plus per-dir
