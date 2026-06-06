@@ -151,6 +151,43 @@ this order: `<root>/.mdtree.json`, then `~/.md_tree_viewer.json`. The schema:
 }
 ```
 
+### Ignoring directories (3 sources / 無視ディレクトリの3経路)
+
+Beyond the built-in skip list, you can add directory **names** to exclude from
+the scan through three sources, applied in this **precedence** order (a higher
+source wins; in practice every source only *adds* names, so the effective set is
+their union over the built-in default):
+
+1. **`--ignore "name1,name2"`** — the command-line flag, highest precedence.
+   Run-only (does not rewrite any file).
+2. **`ignore: [...]` in the config file** (`<root>/.mdtree.json` or
+   `~/.md_tree_viewer.json`) — editable from the ⚙️ settings panel and persisted.
+3. **`<root>/.mdtreeignore`** — a per-project file, gitignore-style: one bare
+   directory **name** per line; blank lines and `#` comments are skipped.
+4. **Built-in default** (`NOISE_DIRS`: `.git`, `node_modules`, `__pycache__`,
+   `.venv`, caches, …) — always applied; the sources above cannot un-skip it.
+
+All sources accept **names only**: any token with a path separator (`/`, `\`) or
+`..` is dropped, so an ignore entry can only ever *exclude* a directory and can
+never be turned into a path-traversal primitive. `GET /api/config` reports both
+the effective merged `ignore` list and an `ignore_sources` breakdown
+(`cli` / `config` / `file` / `builtin`) so the UI can show where each name came
+from.
+
+Example `.mdtreeignore`:
+
+```gitignore
+# directories to hide from the viewer tree
+vendor
+fixtures
+generated
+```
+
+> **日本語**: 走査から除外するディレクトリ**名**は、優先順位 **`--ignore`(CLI)
+> > config の `ignore` > `<root>/.mdtreeignore` ファイル > 内蔵デフォルト**
+> の 3 経路 + 内蔵で指定できます。いずれも「名前のみ」で、パス区切りや `..` を
+> 含むトークンは破棄されるため、除外専用でパストラバーサルには使えません。
+
 ### Startup speed
 
 For a root with thousands of files the tree is loaded **lazily**: the server
