@@ -17,7 +17,10 @@ Features:
 - Right pane: .md is rendered (GFM tables/code/Mermaid), .pdf is embedded, .svg
   is shown as an image.
 - Dependency dirs, virtualenvs and .git are skipped while scanning (fast, no
-  noise); extra directory names can be skipped via config ``ignore: [...]``.
+  noise); extra directory names can be skipped via three sources, in precedence
+  order ``--ignore`` CLI flag > config ``ignore: [...]`` > a ``<root>/.mdtreeignore``
+  file (gitignore-style, one bare dir name per line), all layered on the built-in
+  default skip list.
 - The tree loads lazily (v0.3): the startup payload is shallow (top ~2 levels) and
   deeper directories are fetched on expansion via GET /api/tree?path=<dir>. A
   persistent scan cache under ~/.md_tree_viewer/cache re-scans only directories
