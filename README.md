@@ -47,6 +47,7 @@ mdtree path/to/docs          # scan a specific directory
 mdtree --port 9000           # use a different port (default 8765)
 mdtree --no-browser          # do not open a browser automatically
 mdtree --ext ".md,.rst"      # override the viewable extensions for this run
+mdtree --ignore "vendor,fixtures"  # extra directory names to skip (highest precedence)
 mdtree --enable-open         # allow OS-association launch of non-viewable files
 mdtree --no-cache            # disable the persistent scan cache (always walk fresh)
 ```
