@@ -377,6 +377,11 @@ CLI_IGNORE: tuple[str, ...] = ()
 # and is the lowest-precedence user source above the built-in NOISE_DIRS.
 MDTREEIGNORE_NAME = ".mdtreeignore"
 
+# Names read from <root>/.mdtreeignore at startup. Resolved once in load_config
+# and held separately from CONFIG so it keeps applying across a POST /api/config
+# (which only rewrites the config-file `ignore`, not the file-based source).
+FILE_IGNORE: tuple[str, ...] = ()
+
 # Whether the persistent scan cache (~/.md_tree_viewer/cache/<roothash>.json) is
 # used. Disabled with --no-cache. The cache stores a tree snapshot plus per-dir
 # mtimes so startup re-scans only the directories that changed.
