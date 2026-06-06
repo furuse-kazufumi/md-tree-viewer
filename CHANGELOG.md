@@ -4,6 +4,44 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-06-06
+
+### Added — three-source ignore externalisation (`.mdtreeignore` file + `--ignore` CLI)
+
+Directory-ignore configuration, previously only the config-file `ignore: [...]`
+key (v0.3), is now externalised to **three sources** resolved at startup, in
+precedence order:
+
+1. **`--ignore "name1,name2"`** — new CLI flag, highest precedence (run-only).
+2. **`ignore: [...]`** in the config file (editable in the ⚙️ settings panel).
+3. **`<root>/.mdtreeignore`** — new gitignore-style per-project file (one bare
+   directory name per line; blank lines and `#` comments skipped).
+
+All three are layered on top of the always-applied built-in `NOISE_DIRS`. Every
+source accepts **names only** — any token with a path separator or `..` is
+dropped (`_normalise_ignore_list`), so an ignore entry can only ever *exclude* a
+directory, never become a path-traversal primitive. The effective set is the
+union of the sources; a higher source may re-state a name but cannot un-skip a
+built-in. The CLI and `.mdtreeignore` sources persist across a
+`POST /api/config` (which rewrites only the config-file `ignore`), so a settings
+save does not erase them.
+
+`GET /api/config` now reports an `ignore_sources` breakdown
+(`cli` / `config` / `file` / `builtin`) alongside the effective merged `ignore`
+list, so the UI can show where each name came from and which it may edit.
+
+### Security
+- The `.mdtreeignore` file is **read-only input** (parsed through the same
+  names-only sanitiser as config `ignore`); it never widens the read boundary and
+  cannot reach outside the root. No new write surface — the single config-file
+  write path (`POST /api/config`) is unchanged.
+
+### Changed
+- New `--ignore` CLI flag; README documents the 3-source precedence (with a
+  Japanese summary) and adds a `.mdtreeignore` example. Regression tests added
+  for file parsing, precedence/merge, the API source breakdown, and config-POST
+  source persistence.
+
 ## [0.5.0] - 2026-06-02
 
 ### Added — MS-Office (and OpenDocument) files in the listing, opened via OS association
