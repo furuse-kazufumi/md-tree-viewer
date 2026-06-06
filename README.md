@@ -133,7 +133,8 @@ Open the **⚙️ settings panel** in the top-left to change, and persist:
 - **Ignore directories** — extra directory **names** to skip while scanning, on
   top of the built-in skip list (`.git`, `node_modules`, `__pycache__`, `.venv`,
   caches, …). Names only — anything with a path separator is ignored, so this can
-  only ever *exclude* folders.
+  only ever *exclude* folders. The settings panel edits the **config** source;
+  two more sources can add names (see *Ignoring directories* below).
 - **OS-association open** — toggle whether non-viewable files can be launched.
 - **Theme** — light or dark.
 
