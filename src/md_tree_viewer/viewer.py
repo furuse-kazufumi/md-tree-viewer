@@ -7,6 +7,7 @@ Usage:
     mdtree path/to/dir
     mdtree --port 9000 --no-browser
     mdtree --ext ".md,.rst"     # override the viewable extensions
+    mdtree --ignore "vendor,fixtures"  # extra dir names to skip (highest precedence)
     mdtree --enable-open        # allow OS-association launch of non-viewable files
 
 Features:
