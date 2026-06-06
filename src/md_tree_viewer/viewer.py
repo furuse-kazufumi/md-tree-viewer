@@ -603,7 +603,17 @@ def config_payload() -> dict:
         "project_icons": dict(CONFIG.get("project_icons") or REPO_ICON),
         "enable_open": bool(ENABLE_OPEN),
         "theme": CONFIG.get("theme", "light"),
+        # The effective extra-ignore set (CLI ∪ config ∪ .mdtreeignore), plus a
+        # per-source breakdown so the UI can show where each name came from and
+        # which ones it may safely edit (only the config source is writable via
+        # POST /api/config; CLI and the .mdtreeignore file are read-only here).
         "ignore": sorted(IGNORE_DIRS),
+        "ignore_sources": {
+            "cli": list(CLI_IGNORE),
+            "config": list(CONFIG.get("ignore") or ()),
+            "file": list(FILE_IGNORE),
+            "builtin": sorted(NOISE_DIRS),
+        },
         "default_view_ext": list(DEFAULT_VIEW_EXT),
         "renderable_ext": list(RENDERABLE_EXT),
         "config_path": str(CONFIG_PATH) if CONFIG_PATH else "",
