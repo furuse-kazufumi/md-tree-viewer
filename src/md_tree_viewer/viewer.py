@@ -27,9 +27,17 @@ Features:
   persistent scan cache under ~/.md_tree_viewer/cache re-scans only directories
   whose mtime changed, so startup cost is bounded by breadth, not total files.
   Disable with --no-cache.
-- Settings (viewable extensions, per-project icons, theme, enable-open, ignore)
-  persist to a single config file (``<root>/.mdtree.json`` or
-  ``~/.md_tree_viewer.json``).
+- The "Recently modified" section separates human documents from machine/
+  intermediate files: an all-hex filename of 16+ characters (e.g. a qiita-cli
+  publish copy like ``a5ebb3992e4c28862f47.md``) is detected automatically, and
+  the config key ``recent_exclude`` adds user glob patterns (matched against
+  root-relative paths; ``*`` within a path segment, ``**`` across segments).
+  Matching files move to a collapsed "Recently modified (intermediate)" section
+  instead of crowding the human list out. Display-only classification — it
+  never changes what is scanned or served.
+- Settings (viewable extensions, per-project icons, theme, enable-open, ignore,
+  recent-exclude patterns) persist to a single config file
+  (``<root>/.mdtree.json`` or ``~/.md_tree_viewer.json``).
 - Mostly read-only. GET serves only viewable files under the root, outside pruned
   dirs (.git/node_modules/ignored/…), with path traversal and symlink escape
   prevented. The only request that writes a file you can influence is POST
