@@ -1449,10 +1449,13 @@ const countEl = document.getElementById('count');
 const filterEl = document.getElementById('filter');
 let activeEl = null, treeData = null, flatFiles = [], recentWrap = null, projWrap = null, resultsEl = null;
 const RECENT_KEY = 'mdv_recent_v1', RECENT_MAX = 100;
-const OPEN_KEY = 'mdv_open_dirs_v1', CR_KEY = 'mdv_collapsed_recent_v1';
+const OPEN_KEY = 'mdv_open_dirs_v1', CR_KEY = 'mdv_collapsed_recent_v1', OR_KEY = 'mdv_opened_recent_v1';
 function loadSet(k){ try { return new Set(JSON.parse(localStorage.getItem(k))||[]); } catch(e){ return new Set(); } }
 function saveSet(k, s){ localStorage.setItem(k, JSON.stringify([...s])); }
-let openDirs = loadSet(OPEN_KEY), collapsedRecent = loadSet(CR_KEY);  // dirs collapsed by default / recent open by default
+// openDirs: dirs collapsed by default. collapsedRecent / openedRecent: explicit
+// user toggles of the special recent sections (an entry overrides the section's
+// own default — open for the human list, collapsed for the intermediate list).
+let openDirs = loadSet(OPEN_KEY), collapsedRecent = loadSet(CR_KEY), openedRecent = loadSet(OR_KEY);
 
 function timeago(ts) {
   if (!ts) return '';
