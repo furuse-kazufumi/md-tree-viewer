@@ -293,7 +293,7 @@ endpoints:
 - **The only write endpoint is `POST /api/config`,** and it writes **exactly one
   file** — the config file described above — and nothing else. The request body
   is sanitised to a fixed set of known keys (`view_ext`, `project_icons`,
-  `enable_open`, `theme`); unknown keys and malformed values are dropped, so a
+  `enable_open`, `theme`, `ignore`, `recent_exclude`); unknown keys and malformed values are dropped, so a
   request cannot stash arbitrary data or influence any other path. There is no
   endpoint that writes any file you choose. The write is also refused if the
   config path is a symlink (it cannot be redirected to an outside file).
