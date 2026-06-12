@@ -200,6 +200,38 @@ generated
 > の 3 経路 + 内蔵で指定できます。いずれも「名前のみ」で、パス区切りや `..` を
 > 含むトークンは破棄されるため、除外専用でパストラバーサルには使えません。
 
+### Recently modified: keeping intermediate files out of the way
+
+Bulk-regenerated files (build outputs, publish copies) share one `mtime` burst
+and would otherwise occupy the entire **✨ Recently modified** list. The viewer
+therefore splits the mtime-ordered pool into human documents and
+machine/intermediate files:
+
+- **Built-in heuristic (always on)** — a file whose *name* is 16+ hex characters
+  with a `.md`/`.markdown` extension (e.g. `a5ebb3992e4c28862f47.md`, a
+  qiita-cli publish copy) is classified as machine-generated.
+- **`recent_exclude` config patterns** — add your own globs in the ⚙️ settings
+  panel (one per line), matched **case-insensitively** against the root-relative
+  path: `*` matches within one path segment, `**` across segments (`**/` also
+  matches zero directories). Regex metacharacters in a pattern are escaped
+  before the wildcards are expanded, so a pattern can never inject arbitrary
+  regex; an uncompilable pattern matches nothing (fail-closed).
+
+Human documents stay in **✨ Recently modified** (top 100); classified files
+appear directly below it under **⚙️ Recently modified (intermediate)** (top
+100), **collapsed by default**. An explicit open/close of either section is
+remembered in `localStorage`, so once you open the intermediate section it stays
+open. This is **display-only classification**: it never changes what is
+scanned, listed in the tree, found by search, or served over HTTP.
+
+Example patterns:
+
+```gitignore
+tools/qiita-cli-poc/public/**
+**/qiita37_*.md
+drafts/**
+```
+
 ### Startup speed
 
 For a root with thousands of files the tree is loaded **lazily**: the server
