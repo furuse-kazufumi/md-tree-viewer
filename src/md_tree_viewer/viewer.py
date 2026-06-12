@@ -2019,9 +2019,13 @@ function fillSettings(cfg) {
   draftIcons = Object.assign({}, cfg.project_icons || {});
   draftIgnore = (cfg.ignore || []).slice();
   renderExtList(); renderIconList(); renderIgnoreList();
+  document.getElementById('recentExclude').value = (cfg.recent_exclude || []).join('\n');
   document.getElementById('enableOpen').checked = !!cfg.enable_open;
   document.getElementById('themeSel').value = cfg.theme || 'light';
   document.getElementById('cfgPath').textContent = cfg.config_path ? ('config: ' + cfg.config_path) : '';
+  // The exclude patterns may (re)classify recent entries → recompile + redraw.
+  recentExcludeRes = compileRecentExclude(cfg.recent_exclude || []);
+  renderRecent();
 }
 async function loadConfig() {
   try {
