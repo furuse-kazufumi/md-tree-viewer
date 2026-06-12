@@ -138,6 +138,14 @@ Open the **⚙️ settings panel** in the top-left to change, and persist:
   caches, …). Names only — anything with a path separator is ignored, so this can
   only ever *exclude* folders. The settings panel edits the **config** source;
   two more sources can add names (see *Ignoring directories* below).
+- **Recent-list exclude patterns** (`recent_exclude`) — glob patterns, one per
+  line, matched **case-insensitively** against each file's root-relative path
+  (`*` matches within one path segment, `**` across segments). Matching files
+  are treated as machine/intermediate output and move from **✨ Recently
+  modified** to the collapsed **⚙️ Recently modified (intermediate)** section.
+  Hash-named files (16+ hex characters, e.g. qiita-cli publish copies) are
+  moved automatically, with no pattern needed. Display-only: this never changes
+  what is scanned, shown in the tree, or served (see below).
 - **OS-association open** — toggle whether non-viewable files can be launched.
 - **Theme** — light or dark.
 
