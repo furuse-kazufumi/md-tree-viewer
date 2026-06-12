@@ -1343,6 +1343,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
   #settings input[type=text], #settings input:not([type]) , #settings select {
     border:1px solid var(--border); border-radius:5px; padding:3px 5px; font-size:12px;
     background:var(--bg); color:var(--fg); }
+  #settings textarea { width:100%; border:1px solid var(--border); border-radius:5px;
+    padding:3px 5px; font-size:12px; font-family:ui-monospace,Consolas,monospace;
+    background:var(--bg); color:var(--fg); resize:vertical; }
   #settings button { border:1px solid var(--border); border-radius:5px; padding:3px 8px;
     background:var(--bg); color:var(--accent); cursor:pointer; font-size:12px; }
   #settings button:hover { background:var(--side); }
