@@ -24,6 +24,9 @@ directory tree. Point it at a folder full of docs and browse them by
   skipped while scanning, and you can add your own folder names to skip.
 - **Recently opened / Recently modified** quick sections, and folders that
   contain recently changed files are highlighted so you can find your active work.
+  Machine-generated intermediates (hash-named publish copies, plus any
+  `recent_exclude` glob you configure) stay out of the main list, in a collapsed
+  **Recently modified (intermediate)** section of their own.
 - **Configurable** — viewable extensions, per-project emoji icons, light/dark
   theme and the OS-open toggle are editable in the settings panel and persist to
   a single config file (see *Settings* below).
