@@ -1699,7 +1699,7 @@ async function loadTree(fresh) {
   const r = await fetch('/api/tree' + (fresh ? '?fresh=1' : '')); treeData = await r.json();
   flatFiles = []; collectFlat(treeData);            // files in the shallow levels only
   fullFlatFiles = null; fullTreePromise = null;     // invalidate the full-tree cache
-  openDirs = loadSet(OPEN_KEY); collapsedRecent = loadSet(CR_KEY);
+  openDirs = loadSet(OPEN_KEY); collapsedRecent = loadSet(CR_KEY); openedRecent = loadSet(OR_KEY);
   treeEl.innerHTML = '';
   const hasTop = (treeData.children || []).length > 0;
   if (!hasTop) { treeEl.innerHTML = '<div class="empty">No files to show.</div>'; return; }
