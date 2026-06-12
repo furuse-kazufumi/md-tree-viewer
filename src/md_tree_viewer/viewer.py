@@ -478,6 +478,38 @@ def _normalise_ignore_list(value) -> list[str]:
     return out
 
 
+def _normalise_recent_exclude_list(value) -> list[str]:
+    """Coerce a `recent_exclude` value into a clean list of glob patterns.
+
+    The patterns are matched CLIENT-side (case-insensitively) against each
+    file's root-relative path ('/'-separated) to classify "Recently modified"
+    entries as machine/intermediate output; they never widen — or narrow — what
+    the server scans or serves, so unlike `ignore` they may contain path
+    separators. Validation is still fail-closed: only string items are accepted
+    (a list/tuple of strings, or a newline/comma-separated string from the
+    settings textarea); non-string items and empties are dropped, never
+    coerced. Backslashes are normalised to '/' and a leading './' or '/' is
+    stripped so every pattern reads as root-relative. De-duplicated, order
+    preserved."""
+    if isinstance(value, str):
+        items: list = re.split(r"[,\n]+", value)
+    elif isinstance(value, (list, tuple)):
+        items = [it for it in value if isinstance(it, str)]
+    else:
+        return []
+    out: list[str] = []
+    for it in items:
+        p = it.strip().replace("\\", "/")
+        while p.startswith("./"):
+            p = p[2:]
+        p = p.lstrip("/")
+        if not p:
+            continue
+        if p not in out:
+            out.append(p)
+    return out
+
+
 def _read_mdtreeignore(root: Path) -> list[str]:
     """Read ``<root>/.mdtreeignore`` and return its directory names (lowest-
     precedence user ignore source, above the built-in NOISE_DIRS).
