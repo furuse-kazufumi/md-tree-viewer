@@ -447,6 +447,9 @@ def _coerce_config(raw: dict) -> dict:
     ignore = _normalise_ignore_list(raw.get("ignore"))
     if ignore:
         cfg["ignore"] = ignore
+    recent_exclude = _normalise_recent_exclude_list(raw.get("recent_exclude"))
+    if recent_exclude:
+        cfg["recent_exclude"] = recent_exclude
     return cfg
 
 
