@@ -2071,6 +2071,8 @@ document.getElementById('saveCfg').onclick = async () => {
     view_ext: draftExt,
     project_icons: draftIcons,
     ignore: draftIgnore,
+    recent_exclude: document.getElementById('recentExclude').value
+      .split('\n').map(s => s.trim()).filter(Boolean),
     enable_open: document.getElementById('enableOpen').checked,
     theme: document.getElementById('themeSel').value,
   };
