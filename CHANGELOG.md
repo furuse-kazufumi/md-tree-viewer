@@ -4,6 +4,50 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - 2026-06-12
+
+### Added — "Recently modified" intermediate-file isolation
+
+Bulk-regenerated machine files (e.g. qiita-cli publish copies named like
+`a5ebb3992e4c28862f47.md`) share one `mtime` burst and used to occupy the entire
+**✨ Recently modified** list, hiding the documents a human actually edits. The
+mtime-ordered pool is now split into human and machine/intermediate files:
+
+1. **Built-in heuristic, always on.** A filename of 16+ hex characters with a
+   `.md`/`.markdown` extension is classified as machine-generated (client-side,
+   no configuration needed).
+2. **New config key `recent_exclude`** — user glob patterns, editable in the ⚙️
+   settings panel (one per line, textarea) and persisted via the existing
+   `POST /api/config`. Patterns are matched **case-insensitively** against each
+   file's root-relative path: `*` matches within one path segment, `**` across
+   segments (`**/` also matches zero directories). `GET /api/config` always
+   reports the key (possibly empty).
+3. **New ⚙️ "Recently modified (intermediate)" section** — classified files move
+   there, directly below the main list (top 100 each, mtime order), **collapsed
+   by default**. `makeSpecialSection` gained a `defaultCollapsed` argument; an
+   explicit user open/close is remembered in `localStorage`
+   (`collapsedRecent` + new `openedRecent`), so once opened it stays open.
+
+### Security
+
+- **Fail-closed validation, no new surface.** `recent_exclude` is sanitised in
+  `_coerce_config` via the new `_normalise_recent_exclude_list`: only string
+  patterns are accepted (non-strings and empties are dropped, never coerced),
+  backslashes are normalised to `/`, and a leading `./` or `/` is stripped. The
+  client escapes **every regex metacharacter** in a pattern before expanding the
+  `*`/`**` wildcards, so a pattern cannot inject arbitrary regex; an
+  uncompilable pattern matches nothing. The feature is **display-only
+  classification** — it never widens or narrows what is scanned, listed, or
+  served, and adds no endpoint or write path beyond the unchanged single
+  config-file write.
+
+### Changed
+
+- README documents the split, the pattern syntax, and the `recent_exclude`
+  schema key. Regression tests cover the coercion (acceptance / drop rules),
+  `config_payload()` reporting, the config-POST round trip, and the presence of
+  the client-side machinery in the served page.
+
 ## [0.6.0] - 2026-06-06
 
 ### Added — three-source ignore externalisation (`.mdtreeignore` file + `--ignore` CLI)
