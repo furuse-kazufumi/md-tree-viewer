@@ -1184,3 +1184,90 @@ def test_raw_pdf_and_media_have_no_csp_so_rendering_unaffected(media_tree):
     finally:
         server.shutdown()
         server.server_close()
+
+
+# --------------------------------------------------------------------------- #
+# v0.7 "Recently modified" intermediate isolation: the `recent_exclude` config
+# key (fail-closed coercion, payload reporting, config-POST round trip) and the
+# client-side machinery markers in the served page. The glob→regex conversion
+# itself is client-JS only, so the Python tests cover the server contract.
+# --------------------------------------------------------------------------- #
+
+def test_normalise_recent_exclude_list():
+    """`recent_exclude` accepts only string patterns (a list of strings, or a
+    newline/comma-separated string from the settings textarea); non-strings and
+    empties are dropped — never coerced — and patterns are normalised to
+    root-relative '/' form."""
+    assert viewer._normalise_recent_exclude_list(
+        ["tools/qiita-cli-poc/public/**", "  ", "**/draft_*.md"]
+    ) == ["tools/qiita-cli-poc/public/**", "**/draft_*.md"]
+    # Non-string items are dropped outright (fail-closed), not str()-coerced.
+    assert viewer._normalise_recent_exclude_list(["ok/**", 5, None, {"a": 1}]) == ["ok/**"]
+    # String form splits on newlines/commas (one pattern per textarea line).
+    assert viewer._normalise_recent_exclude_list("a/**\nb/*.md,c.md") == ["a/**", "b/*.md", "c.md"]
+    # Windows separators and anchored forms are normalised to root-relative '/'.
+    assert viewer._normalise_recent_exclude_list(
+        ["tools\\sub\\**", "./x.md", "/y.md"]
+    ) == ["tools/sub/**", "x.md", "y.md"]
+    # De-dup keeps the first occurrence; junk values yield an empty list.
+    assert viewer._normalise_recent_exclude_list(["a/**", "a/**"]) == ["a/**"]
+    assert viewer._normalise_recent_exclude_list(None) == []
+    assert viewer._normalise_recent_exclude_list(42) == []
+
+
+def test_coerce_config_accepts_recent_exclude():
+    cfg = viewer._coerce_config({"recent_exclude": ["public/**", 7, ""]})
+    assert cfg["recent_exclude"] == ["public/**"]      # non-strings/empties dropped
+    assert "recent_exclude" in viewer.CONFIG_KEYS      # sanctioned key
+    # An all-junk value is dropped entirely (fail-closed), not stored as [].
+    assert "recent_exclude" not in viewer._coerce_config({"recent_exclude": [1, 2]})
+    assert "recent_exclude" not in viewer._coerce_config({"recent_exclude": "  "})
+    assert "recent_exclude" not in viewer._coerce_config({"recent_exclude": {"a": 1}})
+
+
+def test_config_payload_reports_recent_exclude(monkeypatch):
+    """GET /api/config always carries `recent_exclude` (possibly empty) so the
+    settings UI can render the textarea without special-casing absence."""
+    monkeypatch.setattr(viewer, "CONFIG", {"recent_exclude": ["public/**"]})
+    assert viewer.config_payload()["recent_exclude"] == ["public/**"]
+    monkeypatch.setattr(viewer, "CONFIG", {})
+    assert viewer.config_payload()["recent_exclude"] == []
+
+
+def test_recent_exclude_round_trips_through_config_post(sample_tree):
+    """POST /api/config persists `recent_exclude` (invalid items dropped on the
+    way in), and GET reflects the saved patterns."""
+    server, port = _serve(sample_tree)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        status, j = _post(base + "/api/config",
+                          {"recent_exclude": ["tools/qiita-cli-poc/public/**", 5, ""]})
+        assert status == 200 and j["ok"] is True
+        assert j["config"]["recent_exclude"] == ["tools/qiita-cli-poc/public/**"]
+        on_disk = json.loads((sample_tree / ".mdtree.json").read_text(encoding="utf-8"))
+        assert on_disk["recent_exclude"] == ["tools/qiita-cli-poc/public/**"]
+        with urlopen(base + "/api/config") as r:
+            cfg = json.loads(r.read())
+        assert cfg["recent_exclude"] == ["tools/qiita-cli-poc/public/**"]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_index_page_carries_intermediate_recent_machinery(sample_tree):
+    """The served page contains the client-side pieces of the feature: the
+    hash-name heuristic, the metachar-escaping glob→regex converter, the
+    default-collapsed intermediate section key, and the settings textarea."""
+    server, port = _serve(sample_tree)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        with urlopen(base + "/") as r:
+            html = r.read().decode("utf-8")
+        assert "MACHINE_MD_RE" in html                 # built-in heuristic present
+        assert "[0-9a-f]{16,}" in html                 # ... matching 16+ hex chars
+        assert "function globToRegExp" in html         # glob converter present
+        assert "::recent_machine" in html              # intermediate section key
+        assert 'id="recentExclude"' in html            # settings textarea present
+    finally:
+        server.shutdown()
+        server.server_close()
