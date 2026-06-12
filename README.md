@@ -157,6 +157,7 @@ this order: `<root>/.mdtree.json`, then `~/.md_tree_viewer.json`. The schema:
   "view_ext": [".md", ".markdown", ".pdf", ".svg"],
   "project_icons": { "docs": "📘" },
   "ignore": ["fixtures", "vendor"],
+  "recent_exclude": ["tools/qiita-cli-poc/public/**"],
   "enable_open": false,
   "theme": "light"
 }
