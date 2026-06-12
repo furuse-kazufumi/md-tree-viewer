@@ -1570,8 +1570,11 @@ function recordRecent(node) {
   r.unshift({ path:node.path, name:node.name, ext:node.ext, title:node.title||'', desc:node.desc||'', ts: Date.now()/1000 });
   localStorage.setItem(RECENT_KEY, JSON.stringify(r.slice(0, RECENT_MAX)));
 }
-function makeSpecialSection(key, title, items) {
-  // Recent section = a collapsible pseudo-folder at the top of the tree. Open by default.
+function makeSpecialSection(key, title, items, defaultCollapsed) {
+  // Recent section = a collapsible pseudo-folder at the top of the tree. Open by
+  // default unless `defaultCollapsed`. An explicit user toggle is remembered in
+  // localStorage either way (collapsedRecent / openedRecent), so a
+  // default-collapsed section stays open once the user has opened it.
   const li = document.createElement('li');
   li.className = 'dir special';
   li.dataset.path = key;
@@ -1583,12 +1586,17 @@ function makeSpecialSection(key, title, items) {
     const fl = document.createElement('li'); fl.appendChild(makeFileSpan(it.node, it.when, true)); ul.appendChild(fl);
   }
   li.appendChild(ul);
-  li.classList.add(collapsedRecent.has(key) ? 'collapsed' : 'open');
+  let open;                                   // explicit toggle wins over the default
+  if (collapsedRecent.has(key)) open = false;
+  else if (openedRecent.has(key)) open = true;
+  else open = !defaultCollapsed;
+  li.classList.add(open ? 'open' : 'collapsed');
   label.onclick = () => {
-    const open = li.classList.contains('collapsed');
-    li.classList.toggle('open', open); li.classList.toggle('collapsed', !open);
-    if (open) collapsedRecent.delete(key); else collapsedRecent.add(key);
-    saveSet(CR_KEY, collapsedRecent);
+    const nowOpen = li.classList.contains('collapsed');
+    li.classList.toggle('open', nowOpen); li.classList.toggle('collapsed', !nowOpen);
+    if (nowOpen) { collapsedRecent.delete(key); openedRecent.add(key); }
+    else { collapsedRecent.add(key); openedRecent.delete(key); }
+    saveSet(CR_KEY, collapsedRecent); saveSet(OR_KEY, openedRecent);
   };
   return li;
 }
