@@ -358,7 +358,8 @@ CONFIG_PATH: Path | None = None
 
 # The complete set of keys the config file is allowed to carry. POST bodies are
 # filtered to these keys so an attacker cannot stash arbitrary data in the file.
-CONFIG_KEYS = ("view_ext", "project_icons", "enable_open", "theme", "ignore")
+CONFIG_KEYS = ("view_ext", "project_icons", "enable_open", "theme", "ignore",
+               "recent_exclude")
 
 # Extra directory names to skip while scanning, merged with NOISE_DIRS at lookup
 # time. This is the EFFECTIVE set actually used by _skip_dir; it is the union of
