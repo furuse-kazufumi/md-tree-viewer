@@ -654,6 +654,10 @@ def config_payload() -> dict:
             "file": list(FILE_IGNORE),
             "builtin": sorted(NOISE_DIRS),
         },
+        # Glob patterns the client matches against root-relative paths to move
+        # "Recently modified" entries into the collapsed intermediate section.
+        # Display-only classification: never affects what is scanned or served.
+        "recent_exclude": list(CONFIG.get("recent_exclude") or ()),
         "default_view_ext": list(DEFAULT_VIEW_EXT),
         "renderable_ext": list(RENDERABLE_EXT),
         "config_path": str(CONFIG_PATH) if CONFIG_PATH else "",
