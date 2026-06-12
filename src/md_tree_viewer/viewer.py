@@ -1601,6 +1601,50 @@ function makeSpecialSection(key, title, items, defaultCollapsed) {
   return li;
 }
 
+// ---- machine/intermediate classification for "Recently modified" -------------
+// Built-in heuristic, always on: a filename that is 16+ hex characters (e.g. a
+// qiita-cli publish copy like a5ebb3992e4c28862f47.md) is machine-generated and
+// should not crowd human documents out of the recent list.
+const MACHINE_MD_RE = /^[0-9a-f]{16,}\.(md|markdown)$/i;
+
+// Compile one glob pattern (root-relative, '/'-separated; `*` = within one path
+// segment, `**` = across segments, `**/` also matches zero directories) into an
+// anchored, case-insensitive RegExp. Every regex metacharacter in the pattern is
+// escaped BEFORE the glob tokens are expanded, so a pattern can never inject
+// arbitrary regex — only the two wildcard forms are special. Returns null for an
+// uncompilable pattern (fail-closed: a bad pattern matches nothing, not everything).
+function globToRegExp(pat) {
+  let out = '';
+  for (let i = 0; i < pat.length; i++) {
+    const ch = pat[i];
+    if (ch === '*') {
+      if (pat[i + 1] === '*') {
+        i++;                                   // consume the second '*'
+        if (pat[i + 1] === '/') { i++; out += '(?:.*/)?'; }   // `**/` = 0+ dirs
+        else out += '.*';                      // bare `**` spans separators
+      } else {
+        out += '[^/]*';                        // `*` stays within one segment
+      }
+    } else {
+      out += ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+  }
+  try { return new RegExp('^' + out + '$', 'i'); } catch (e) { return null; }
+}
+
+// Compiled from the server config's recent_exclude (set by fillSettings).
+let recentExcludeRes = [];
+function compileRecentExclude(pats) {
+  const res = [];
+  for (const p of (pats || [])) { const re = globToRegExp(String(p)); if (re) res.push(re); }
+  return res;
+}
+function isIntermediate(node) {
+  if (MACHINE_MD_RE.test(node.name)) return true;
+  for (const re of recentExcludeRes) if (re.test(node.path)) return true;
+  return false;
+}
+
 function renderRecent() {
   if (!recentWrap) return;
   recentWrap.innerHTML = '';
@@ -1612,10 +1656,19 @@ function renderRecent() {
   // Prefer the complete file list once it has loaded so the "recently modified"
   // section reflects the whole tree, not just the shallow startup levels.
   const pool = fullFlatFiles || flatFiles;
-  const mod = pool.filter(f => f.mtime).slice().sort((a, b) => b.mtime - a.mtime).slice(0, 100);
-  if (mod.length) {
+  const sorted = pool.filter(f => f.mtime).slice().sort((a, b) => b.mtime - a.mtime);
+  // Split the mtime-ordered pool into human documents and machine/intermediate
+  // files (hash-named publish copies + recent_exclude matches), so one bulk
+  // regeneration of intermediates cannot occupy the whole human list.
+  const human = [], machine = [];
+  for (const f of sorted) (isIntermediate(f) ? machine : human).push(f);
+  if (human.length) {
     recentWrap.appendChild(makeSpecialSection('::recent_modified', '✨ Recently modified',
-      mod.map(n => ({ node: n, when: timeago(n.mtime) }))));
+      human.slice(0, 100).map(n => ({ node: n, when: timeago(n.mtime) }))));
+  }
+  if (machine.length) {
+    recentWrap.appendChild(makeSpecialSection('::recent_machine', '⚙️ Recently modified (intermediate)',
+      machine.slice(0, 100).map(n => ({ node: n, when: timeago(n.mtime) })), true));
   }
 }
 
